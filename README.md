@@ -3,12 +3,13 @@
 Strona, na której znajomi proszą o spotkanie bez zakładania kont, a Ty je zatwierdzasz w panelu admina.
 
 - Kalendarz: zielony = wolny cały dzień, żółty = wolne tylko niektóre godziny, **pomarańczowy = oczekuje na zatwierdzenie**, czerwony = zajęty
-- Zapis na przedział godzin (co 30 min, całą dobę), w jednym czasie tylko jedna osoba
+- Zapis: wybór godziny początku i końca (co 30 min, całą dobę, minimum 1 godzina), w jednym czasie tylko jedna osoba
 - Nowa prośba ma status **oczekuje**: termin jest zajęty, ale czeka na Twoją decyzję
 - Po zatwierdzeniu status zmienia się na zajęty, a znajomy dostaje e-mail
 - Zajęcie całego dnia checkboxem
 - Panel admina z logowaniem: lista „Do zatwierdzenia”, dodawanie spotkań (od razu zatwierdzonych), usuwanie
 - Znajomi dostają link do odwołania swojego zapisu
+- Animacje (litery nagłówka, kalendarz, panel, znaczek po wysłaniu). Wyłączają się same, gdy w systemie włączono ograniczenie ruchu
 
 Stack: Vite + React + Supabase (baza i logowanie) + EmailJS (e-maile) + Vercel (hosting).
 
@@ -50,7 +51,6 @@ EmailJS wysyła e-maile z Twojego konta pocztowego (np. Gmail), bez własnego se
 
 1. Załóż konto na https://www.emailjs.com
 2. **Email Services -> Add New Service**: wybierz Gmail (lub inną pocztę), połącz konto. Zapisz **Service ID** (`service_...`).
-         kod service_tpwng8z
 3. **Email Templates -> Create New Template**. W ustawieniach szablonu:
    - **To Email:** `{{to_email}}`
    - **Reply To:** Twój adres (żeby odpowiedź znajomego trafiła do Ciebie)
@@ -73,7 +73,6 @@ EmailJS wysyła e-maile z Twojego konta pocztowego (np. Gmail), bez własnego se
 
    Zapisz szablon i skopiuj jego **Template ID** (`template_...`).
 4. **Account -> General**: skopiuj **Public Key**.
-
 5. Wpisz te trzy wartości do `.env` jako `VITE_EMAILJS_SERVICE_ID`, `VITE_EMAILJS_TEMPLATE_ID`, `VITE_EMAILJS_PUBLIC_KEY`.
 
 Zmienne dostępne w szablonie: `to_email`, `to_name`, `date`, `time`, `cancel_link`, `site_title`.
@@ -114,6 +113,17 @@ imion ani e-maili, nie zatwierdzi i nie usunie cudzych zapisów.
 - **Usuń** kasuje prośbę (odrzucenie). Znajomy nie dostaje o tym wiadomości.
 - Spotkania dodane przez Ciebie w panelu są od razu zatwierdzone.
 
+## Wybór początku i końca (minimum 1 godzina)
+
+W formularzu klikasz godzinę początku, a potem godzinę końca. Godziny krótsze niż 1 h od początku są zablokowane,
+a koniec nie może wejść na zajęty termin (może kończyć się tuż przed nim). Kliknięcie początku jeszcze raz zdejmuje wybór.
+Alternatywa to „Cały dzień”. Zasada jest sprawdzana w formularzu i w bazie (dotyczy też spotkań dodawanych w panelu admina).
+
+Jeśli baza działa od wcześniej, uruchom raz w SQL Editorze `supabase/migration_min_1h.sql`
+(istniejące zapisy zostają bez zmian). Jeśli wcześniej uruchomiłaś `migration_min_30_min.sql`, ta migracja ją zastępuje.
+
+Minimalną długość zmienisz w `src/config.js` (`MIN_DURATION`) i w `supabase/schema.sql` (liczba 60 minut).
+
 ## Ustawienia
 
 W `src/config.js`: tytuł i opis strony, godziny, w których można się umawiać (`DAY_START`, `DAY_END`; domyślnie całą dobę, 0–24),
@@ -134,4 +144,4 @@ długość pola godzinowego (`STEP`).
 
 ## Testy
 
-`npm test` uruchamia testy interfejsu (kalendarz, statusy, zapis, zatwierdzanie, e-mail, panel admina).
+`npm test` uruchamia testy interfejsu (kalendarz, statusy, wybór początku i końca, zapis, zatwierdzanie, e-mail, panel admina).

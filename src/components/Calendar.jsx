@@ -30,6 +30,7 @@ export default function Calendar({
   statusByDay,
   pendingByDay,
   loading,
+  dir,
   selected,
   today,
   lockPast,
@@ -42,7 +43,7 @@ export default function Calendar({
   return (
     <section className="cal" aria-label="Kalendarz">
       <div className="cal__head">
-        <h2 className="cal__title" aria-live="polite">
+        <h2 key={title} className="cal__title cal__title--anim" aria-live="polite">
           {title}
         </h2>
         <div className="cal__nav">
@@ -55,7 +56,7 @@ export default function Calendar({
         </div>
       </div>
 
-      <div className="cal__grid">
+      <div key={title} className={`cal__grid cal__grid--${dir}`}>
         {DOW.map((d) => (
           <div key={d} className="cal__dow" aria-hidden="true">
             {d}
@@ -64,7 +65,7 @@ export default function Calendar({
         {Array.from({ length: lead }, (_, i) => (
           <div key={`b${i}`} />
         ))}
-        {days.map((iso) => {
+        {days.map((iso, idx) => {
           const past = iso < today;
           const status = statusByDay[iso] || 'free';
           const mixedPending = Boolean(pendingByDay[iso]) && status !== 'pending';
@@ -90,6 +91,7 @@ export default function Calendar({
                   ? 'wczytywanie'
                   : STATUS_LABEL[status] + (mixedPending ? ', w tym terminy oczekujące na zatwierdzenie' : '')
               }`}
+              style={{ '--i': idx + lead }}
               onClick={() => onSelect(iso)}
             >
               <span className="day__num">{Number(iso.slice(8))}</span>

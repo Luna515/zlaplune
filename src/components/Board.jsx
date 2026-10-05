@@ -26,6 +26,7 @@ export default function Board({ mode }) {
   const [pendingItems, setPendingItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [dir, setDir] = useState('init');
   const [selected, setSelected] = useState(null);
   const [needsCode, setNeedsCode] = useState(false);
   const [version, setVersion] = useState(0);
@@ -111,12 +112,15 @@ export default function Board({ mode }) {
 
   function jumpTo(iso) {
     const d = parseISO(iso);
+    const target = d.getFullYear() * 12 + d.getMonth();
+    if (target !== ym.y * 12 + ym.m) setDir(target > ym.y * 12 + ym.m ? 'next' : 'prev');
     setYm({ y: d.getFullYear(), m: d.getMonth() });
     selectDay(iso);
   }
 
   function shift(delta) {
     const d = new Date(ym.y, ym.m + delta, 1);
+    setDir(delta > 0 ? 'next' : 'prev');
     setYm({ y: d.getFullYear(), m: d.getMonth() });
     setSelected(null);
   }
@@ -138,6 +142,7 @@ export default function Board({ mode }) {
             statusByDay={statusByDay}
             pendingByDay={pendingByDay}
             loading={loading}
+            dir={dir}
             selected={selected}
             today={today}
             lockPast={!isAdmin}

@@ -12,8 +12,8 @@ export default function PendingList({ items, onPick }) {
         <p className="muted">Nic nie czeka na zatwierdzenie.</p>
       ) : (
         <ul className="pending__list">
-          {items.map((r) => (
-            <li key={r.id}>
+          {items.map((r, n) => (
+            <li key={r.id} style={{ '--i': n }}>
               <button type="button" onClick={() => onPick(r.day)}>
                 <span className="pending__when">
                   {formatDayLong(r.day)},{' '}

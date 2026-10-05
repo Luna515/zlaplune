@@ -88,6 +88,7 @@ export default function SlotPicker({ busy, blocked, value, onChange, disabled })
               aria-label={`${minToTime(p)}${
                 showBusy ? (busy[i] === 'pending' ? ', oczekuje na zatwierdzenie' : ', zajęte') : ''
               }`}
+              style={{ '--i': i }}
               onClick={() => click(i)}
             >
               {minToTime(p)}

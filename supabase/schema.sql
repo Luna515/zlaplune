@@ -34,6 +34,8 @@ create table if not exists public.bookings (
   cancel_token uuid not null default gen_random_uuid(),
   created_at   timestamptz not null default now(),
   check (end_time > start_time),
+  -- minimum 1 godzina (poza rezerwacją na cały dzień)
+  constraint bookings_min_duration check (all_day or (end_time - start_time) >= interval '60 minutes'),
   -- w jednym czasie może być zapisana tylko jedna osoba
   exclude using gist (tsrange(day + start_time, day + end_time) with &&)
 );
@@ -143,6 +145,10 @@ begin
 
   if v_end <= v_start then
     raise exception 'Godzina końca musi być po godzinie początku';
+  end if;
+
+  if not p_all_day and (v_end - v_start) < interval '60 minutes' then
+    raise exception 'Wybierz początek i koniec: minimum 1 godzina';
   end if;
 
   if (p_day + v_start) < v_now then

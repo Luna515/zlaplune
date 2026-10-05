@@ -221,7 +221,11 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
       ? `${window.location.origin}${window.location.pathname}#/anuluj/${result.token}`
       : '';
     return (
-      <div className="panel" aria-live="polite">
+      <div key="done" className="panel panel--done" aria-live="polite">
+        <svg className="tick" viewBox="0 0 52 52" aria-hidden="true">
+          <circle cx="26" cy="26" r="24" fill="none" pathLength="1" />
+          <path d="M14 27l8 8 16-17" fill="none" pathLength="1" />
+        </svg>
         <h2>Wysłane</h2>
         <p className="badge badge--pending">Czeka na zatwierdzenie</p>
         <p className="panel__sub">
@@ -230,8 +234,8 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
         </p>
         <p>
           Twój termin jest w trakcie rozpatrywania. Gdy go zatwierdzę, dostaniesz wiadomość
-          na adres <strong>{result.email}</strong>. Jeżeli nie widzisz wiadomości, koniecznie sprawdź folder spam. Do tego czasu termin jest zarezerwowany
-          dla Ciebie.
+          na adres <strong>{result.email}</strong>. Jeżeli nie widzisz wiadomości, koniecznie
+          sprawdź folder spam. Do tego czasu termin jest zarezerwowany dla Ciebie.
         </p>
         {url && (
           <>
@@ -264,7 +268,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
   }
 
   return (
-    <div className="panel">
+    <div key="form" className="panel">
       <h2>{formatDayLong(iso)}</h2>
       <p className="panel__sub">
         {hasBusy ? (isAdmin ? 'Spotkania tego dnia' : 'Zajęte terminy tego dnia') : 'Nic jeszcze nie zaplanowano'}

@@ -104,6 +104,13 @@ const day = (n) => {
 const fillEmail = (v = 'ania@example.com') =>
   fireEvent.change(screen.getByLabelText(/^E-mail/), { target: { value: v } });
 
+describe('nagłówek', () => {
+  it('strona ma tytuł „Złap Lunę”', () => {
+    render(<App />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Złap Lunę' })).toBeTruthy();
+  });
+});
+
 describe('statusy dni', () => {
   it('dayStatus: free / partial / full', () => {
     expect(dayStatus([])).toBe('free');
@@ -178,7 +185,10 @@ describe('strona publiczna', () => {
     expect(screen.getByRole('button', { name: '11:30, zajęte' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: '12:00' }).disabled).toBe(false);
     expect(screen.getByLabelText('Cały dzień').disabled).toBe(true);
+    // 09:30 nie może być początkiem: do zajętego 10:00 jest tylko 30 min
+    expect(screen.getByRole('button', { name: '09:30' }).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '09:00' }));
+    // koniec za zajętym terminem jest niemożliwy; kliknięcie 12:00 zmienia początek
     fireEvent.click(screen.getByRole('button', { name: '12:00' }));
     expect(screen.getByRole('button', { name: '09:00' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: '12:00' }).getAttribute('aria-pressed')).toBe('true');
@@ -189,7 +199,7 @@ describe('strona publiczna', () => {
     await waitFor(() => expect(day(15).className).toContain('day--free'));
     fireEvent.click(day(15));
     fireEvent.click(screen.getByRole('button', { name: '10:00' }));
-    fireEvent.click(screen.getByRole('button', { name: '11:00' }));
+    fireEvent.click(screen.getByRole('button', { name: '11:30' }));
     expect(screen.getByText(/10:00–11:30 \(1 h 30 min\)/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Imię'), { target: { value: 'Ania' } });
     const submit = screen.getByRole('button', { name: 'Wyślij prośbę o spotkanie' });
@@ -205,6 +215,7 @@ describe('strona publiczna', () => {
     });
     expect(screen.getByText('Czeka na zatwierdzenie')).toBeTruthy();
     expect(screen.getByText(/w trakcie rozpatrywania/)).toBeTruthy();
+    expect(screen.getByText(/koniecznie\s+sprawdź folder spam/)).toBeTruthy();
     expect(screen.getByText('ania@example.com')).toBeTruthy();
     expect(screen.getByLabelText('Link do anulowania').value).toContain('#/anuluj/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
   });
@@ -237,6 +248,7 @@ describe('strona publiczna', () => {
     await waitFor(() => expect(day(15).className).toContain('day--free'));
     fireEvent.click(day(15));
     fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    fireEvent.click(screen.getByRole('button', { name: '11:00' }));
     fireEvent.change(screen.getByLabelText('Imię'), { target: { value: 'Bot' } });
     fillEmail('bot@x.pl');
     fireEvent.change(container.querySelector('input.hp'), { target: { value: 'spam' } });
@@ -251,7 +263,7 @@ describe('strona publiczna', () => {
     fireEvent.click(day(15));
     expect(screen.getByRole('button', { name: '00:00' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '23:00' }));
-    fireEvent.click(screen.getByRole('button', { name: '23:30' }));
+    fireEvent.click(screen.getByRole('button', { name: '24:00' }));
     expect(screen.getByText(/23:00–24:00 \(1 h\)/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Imię'), { target: { value: 'Ola' } });
     fillEmail('ola@x.pl');
@@ -408,5 +420,85 @@ describe('strona anulowania', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Odwołaj zapis' }));
     await screen.findByText('Odwołane');
     expect(h.state.calls.find((c) => c[1] === 'cancel_booking')[2]).toEqual({ p_token: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' });
+  });
+});
+
+describe('początek i koniec, minimum 1 godzina', () => {
+  const setup = async () => {
+    render(<App />);
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    fireEvent.click(day(15));
+    fireEvent.change(screen.getByLabelText('Imię'), { target: { value: 'Ania' } });
+    fillEmail();
+  };
+  const submitBtn = () => screen.getByRole('button', { name: 'Wyślij prośbę o spotkanie' });
+
+  it('bez wyboru: przycisk nieaktywny i widać komunikat', async () => {
+    await setup();
+    expect(submitBtn().disabled).toBe(true);
+    expect(screen.getByText(/Wybierz początek i koniec \(minimum 1 h\)/)).toBeTruthy();
+  });
+
+  it('sam początek nie wystarcza: trzeba jeszcze wybrać koniec', async () => {
+    await setup();
+    fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    expect(submitBtn().disabled).toBe(true);
+    expect(screen.getByText(/Początek: 10:00\. Wybierz koniec\./)).toBeTruthy();
+    expect(screen.getByText(/Teraz kliknij godzinę końca/)).toBeTruthy();
+  });
+
+  it('koniec wcześniej niż po godzinie od początku jest zablokowany', async () => {
+    await setup();
+    fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    expect(screen.getByRole('button', { name: '10:30' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: '11:00' }).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '10:30' })); // nic nie robi
+    expect(submitBtn().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '11:00' }));
+    expect(screen.getByText(/10:00–11:00 \(1 h\)/)).toBeTruthy();
+    expect(submitBtn().disabled).toBe(false);
+    expect(screen.queryByText(/Wybierz początek i koniec \(minimum/)).toBeNull();
+  });
+
+  it('kliknięcie początku jeszcze raz zdejmuje wybór; po wyborze można zacząć od nowa', async () => {
+    await setup();
+    fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    expect(screen.getByRole('button', { name: '10:00' }).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    fireEvent.click(screen.getByRole('button', { name: '12:00' }));
+    expect(screen.getByText(/10:00–12:00 \(2 h\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '14:00' })); // nowy początek
+    expect(screen.getByRole('button', { name: '10:00' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText(/Początek: 14:00/)).toBeTruthy();
+    expect(submitBtn().disabled).toBe(true);
+  });
+
+  it('wysyła wybrany początek i koniec do bazy', async () => {
+    await setup();
+    fireEvent.click(screen.getByRole('button', { name: '13:00' }));
+    fireEvent.click(screen.getByRole('button', { name: '15:00' }));
+    fireEvent.click(submitBtn());
+    await screen.findByText('Wysłane');
+    expect(h.state.calls.find((c) => c[1] === 'book_slot')[2]).toMatchObject({
+      p_start: '13:00', p_end: '15:00', p_all_day: false,
+    });
+  });
+
+  it('cały dzień nie wymaga początku i końca', async () => {
+    await setup();
+    fireEvent.click(screen.getByLabelText('Cały dzień'));
+    expect(screen.queryByText(/Wybierz początek i koniec \(minimum/)).toBeNull();
+    expect(submitBtn().disabled).toBe(false);
+  });
+
+  it('koniec nie może wejść na zajęty termin, ale może kończyć się tuż przed nim', async () => {
+    render(<App />);
+    await waitFor(() => expect(day(14).className).toContain('day--partial'));
+    fireEvent.click(day(14)); // zajęte 10:00-12:00
+    fireEvent.click(screen.getByRole('button', { name: '08:00' }));
+    expect(screen.getByRole('button', { name: '10:00' }).disabled).toBe(false); // koniec o 10:00 jest OK
+    expect(screen.getByRole('button', { name: '10:30, zajęte' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: '12:00' }).getAttribute('aria-pressed')).toBe('false');
   });
 });
