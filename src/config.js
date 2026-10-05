@@ -1,6 +1,6 @@
 // Ustawienia, które możesz zmienić
 
-export const SITE_TITLE = 'Umów się ze mną';
+export const SITE_TITLE = 'Złap Lune';
 export const SITE_LEDE =
   'Wybierz dzień w kalendarzu, potem godziny, w których możemy się spotkać. Konto nie jest potrzebne.';
 
