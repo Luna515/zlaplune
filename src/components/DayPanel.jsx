@@ -215,7 +215,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
         </p>
         <p>
           Twój termin jest w trakcie rozpatrywania. Gdy go zatwierdzę, dostaniesz wiadomość
-          na adres <strong>{result.email}</strong>. Koniecznie sprawdź spam. Do tego czasu termin jest zarezerwowany
+          na adres <strong>{result.email}</strong>. Jeżeli nie widzisz wiadomości, koniecznie sprawdź folder spam. Do tego czasu termin jest zarezerwowany
           dla Ciebie.
         </p>
         {url && (
