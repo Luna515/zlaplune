@@ -809,3 +809,40 @@ p.badge {
 .pending__when::first-letter {
   text-transform: uppercase;
 }
+
+.hint--required {
+  margin: 0;
+  color: var(--text);
+}
+
+/* ---------- wybór początku i końca ---------- */
+
+.slot small {
+  display: block;
+  font-size: 11px;
+  line-height: 1;
+  margin-top: 2px;
+  opacity: 0.75;
+}
+
+.slot--range {
+  background: rgba(236, 233, 226, 0.14);
+  border-color: rgba(236, 233, 226, 0.35);
+}
+
+.slot--end {
+  border-color: var(--text);
+  box-shadow: 0 0 14px -4px rgba(236, 233, 226, 0.6);
+}
+
+.slot--na {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.summary--partial {
+  font-family: var(--body);
+  font-weight: 400;
+  font-size: 16px;
+  color: var(--muted);
+}

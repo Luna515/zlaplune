@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import {
+  POINTS,
   SLOTS,
   busyMask,
   formatDayLong,
@@ -10,7 +11,7 @@ import {
   todayISO,
   toInterval,
 } from '../lib/dates';
-import { STEP } from '../config';
+import { MIN_DURATION } from '../config';
 import { NOT_CONFIGURED, sendAcceptedEmail } from '../lib/email';
 import SlotPicker from './SlotPicker';
 
@@ -62,11 +63,12 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
 
   const dayClosed = !isAdmin && isPast;
   const allDayLocked = hasBusy || (!isAdmin && isToday);
+  const complete = Boolean(range && range.end != null);
   const canSubmit =
-    name.trim() && (isAdmin || email.trim()) && (allDay || range) && !sending && !dayClosed;
+    name.trim() && (isAdmin || email.trim()) && (allDay || complete) && !sending && !dayClosed;
 
-  const startMin = range ? SLOTS[range.from] : null;
-  const endMin = range ? SLOTS[range.to] + STEP : null;
+  const startMin = range ? POINTS[range.start] : null;
+  const endMin = complete ? POINTS[range.end] : null;
 
   // ---------- zapis (znajomy) / dodanie spotkania (admin) ----------
 
@@ -76,6 +78,11 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
     setError('');
     setActionError('');
     setNotice('');
+
+    if (!allDay && (!complete || endMin - startMin < MIN_DURATION)) {
+      setError(`Wybierz początek i koniec: minimum ${formatDuration(MIN_DURATION)}.`);
+      return;
+    }
 
     // pole-pułapka dla botów: człowiek go nie widzi
     if (!isAdmin && hp) {
@@ -143,11 +150,19 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
     try {
       await sendAcceptedEmail(r);
     } catch (e) {
-      setActionError(
-        e.message === NOT_CONFIGURED
-          ? 'Zatwierdzone, ale e-mail nie został wysłany: brakuje konfiguracji EmailJS (zobacz README).'
-          : 'Zatwierdzone, ale nie udało się wysłać e-maila. Użyj przycisku „Wyślij e-mail ponownie”.'
-      );
+      if (e?.message === NOT_CONFIGURED) {
+        setActionError(
+          'Zatwierdzone, ale e-mail nie został wysłany: brakuje konfiguracji EmailJS (zobacz README).'
+        );
+      } else {
+        // EmailJS zwraca { status, text } - pokazujemy to, żeby wiadomo było, co poszło nie tak
+        const detail = [e?.status, e?.text || e?.message].filter(Boolean).join(': ');
+        console.error('EmailJS:', e);
+        setActionError(
+          `Zatwierdzone, ale nie udało się wysłać e-maila${detail ? ` (${detail})` : ''}. ` +
+            'Popraw przyczynę i użyj przycisku „Wyślij e-mail ponownie”.'
+        );
+      }
       return;
     }
     await supabase.from('bookings').update({ notified_at: new Date().toISOString() }).eq('id', r.id);
@@ -215,7 +230,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
         </p>
         <p>
           Twój termin jest w trakcie rozpatrywania. Gdy go zatwierdzę, dostaniesz wiadomość
-          na adres <strong>{result.email}</strong>. Do tego czasu termin jest zarezerwowany
+          na adres <strong>{result.email}</strong>. Jeżeli nie widzisz wiadomości, koniecznie sprawdź folder spam. Do tego czasu termin jest zarezerwowany
           dla Ciebie.
         </p>
         {url && (
@@ -362,10 +377,13 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
             disabled={allDay}
           />
 
-          {range && !allDay && (
+          {complete && !allDay && (
             <p className="summary">
               {minToTime(startMin)}–{minToTime(endMin)} ({formatDuration(endMin - startMin)})
             </p>
+          )}
+          {range && !complete && !allDay && (
+            <p className="summary summary--partial">Początek: {minToTime(startMin)}. Wybierz koniec.</p>
           )}
 
           <label className="field">
@@ -416,6 +434,12 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
               value={hp}
               onChange={(e) => setHp(e.target.value)}
             />
+          )}
+
+          {!allDay && !complete && !error && (
+            <p className="hint hint--required">
+              Wybierz początek i koniec (minimum {formatDuration(MIN_DURATION)}) albo zaznacz cały dzień.
+            </p>
           )}
 
           {error && (

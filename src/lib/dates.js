@@ -67,6 +67,9 @@ export const SLOTS = Array.from(
   (_, i) => DAY_START * 60 + i * STEP
 );
 
+// Punkty w czasie, z których można wybrać początek i koniec (z końcem doby włącznie)
+export const POINTS = [...SLOTS, DAY_END * 60];
+
 // wiersz z bazy -> przedział w minutach (+ status: 'pending' albo 'accepted')
 export const toInterval = (row) => {
   const status = row.status === 'pending' ? 'pending' : 'accepted';
