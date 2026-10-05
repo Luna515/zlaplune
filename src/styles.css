@@ -1,13 +1,14 @@
 :root {
-  --bg: #131417;
-  --surface: #1a1c20;
-  --surface-2: #23262b;
-  --line: #31353b;
+  --bg: #0a0b0d;
+  --surface: #121317;
+  --surface-2: #1b1d22;
+  --line: #2a2d33;
   --text: #ece9e2;
   --muted: #8f949c;
 
   --free: #4cc38a;
-  --partial: #f0b429;
+  --partial: #f2d44b;
+  --pending: #ff8a2b;
   --full: #ef4b4b;
 
   --display: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
@@ -27,7 +28,9 @@ html {
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: radial-gradient(900px 480px at 12% -8%, rgba(236, 233, 226, 0.06), transparent 65%),
+    radial-gradient(700px 420px at 100% 0%, rgba(236, 233, 226, 0.035), transparent 60%), var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--body);
   font-size: 16px;
@@ -559,4 +562,250 @@ input:focus-visible {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+
+/* =====================================================================
+   Moderacja: status "oczekuje" (pomarańczowy) + efekt glow
+   ===================================================================== */
+
+/* ---------- glow ---------- */
+
+.hero h1 {
+  text-shadow: 0 0 32px rgba(236, 233, 226, 0.28), 0 0 2px rgba(236, 233, 226, 0.5);
+}
+
+.panel {
+  box-shadow: 0 0 44px -22px rgba(236, 233, 226, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.day__bar {
+  box-shadow: 0 0 14px 1px var(--c);
+}
+
+.day--free,
+.day--partial,
+.day--full,
+.day--pending {
+  box-shadow: 0 0 20px -8px var(--c);
+}
+
+.day--free:hover:not(:disabled),
+.day--partial:hover:not(:disabled),
+.day--full:hover:not(:disabled),
+.day--pending:hover:not(:disabled) {
+  border-color: var(--c);
+  box-shadow: 0 0 22px -4px var(--c);
+}
+
+.day[aria-pressed='true'] {
+  box-shadow: 0 0 0 1px var(--text), 0 0 26px 0 rgba(236, 233, 226, 0.4);
+}
+
+.day--past,
+.day--past:disabled {
+  box-shadow: none;
+}
+
+.legend i {
+  box-shadow: 0 0 10px var(--c);
+}
+
+.btn {
+  box-shadow: 0 0 22px -4px rgba(236, 233, 226, 0.45);
+}
+
+.btn:hover:not(:disabled) {
+  box-shadow: 0 0 30px -2px rgba(236, 233, 226, 0.6);
+}
+
+.btn:disabled,
+.btn--ghost,
+.btn--danger {
+  box-shadow: none;
+}
+
+.slot--on {
+  box-shadow: 0 0 18px -2px rgba(236, 233, 226, 0.55);
+}
+
+.cal__nav button:hover:not(:disabled) {
+  box-shadow: 0 0 16px -4px rgba(236, 233, 226, 0.35);
+}
+
+input:focus-visible {
+  box-shadow: 0 0 0 1px var(--text), 0 0 18px -4px rgba(236, 233, 226, 0.5);
+}
+
+/* ---------- status: oczekuje na zatwierdzenie ---------- */
+
+.day--pending {
+  --c: var(--pending);
+  background: color-mix(in srgb, var(--pending) 13%, var(--surface));
+}
+
+.day--pending .day__bar {
+  background: repeating-linear-gradient(135deg, var(--pending) 0 7px, #b3560d 7px 14px);
+}
+
+/* kropka: dzień ma i zatwierdzone, i oczekujące terminy */
+.day__dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--pending);
+  box-shadow: 0 0 10px 1px var(--pending);
+}
+
+.legend__pending {
+  background: repeating-linear-gradient(135deg, var(--pending) 0 5px, #b3560d 5px 10px) !important;
+}
+
+.slot--pending {
+  color: #ffc796;
+  border-color: rgba(255, 138, 43, 0.6);
+  background: repeating-linear-gradient(135deg, rgba(255, 138, 43, 0.3) 0 5px, transparent 5px 10px);
+  box-shadow: 0 0 14px -6px var(--pending);
+  cursor: not-allowed;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+.badge--pending {
+  color: #ffc796;
+  border-color: rgba(255, 138, 43, 0.7);
+  background: rgba(255, 138, 43, 0.12);
+  box-shadow: 0 0 14px -4px var(--pending);
+}
+
+.badge--accepted {
+  color: #f3a3a3;
+  border-color: rgba(239, 75, 75, 0.55);
+  background: rgba(239, 75, 75, 0.1);
+}
+
+p.badge {
+  margin: 10px 0 0;
+}
+
+.entry--pending {
+  border-left: 3px solid var(--pending);
+  padding-left: 12px;
+  margin-left: -15px;
+}
+
+.entry__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.hint--pending {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--pending);
+  background: rgba(255, 138, 43, 0.08);
+  color: #ffc796;
+}
+
+.btn--accept {
+  padding: 8px 16px;
+  background: var(--pending);
+  border-color: var(--pending);
+  color: #1c0d02;
+  box-shadow: 0 0 22px -4px var(--pending);
+}
+
+.btn--accept:hover:not(:disabled) {
+  background: #ffa04f;
+  box-shadow: 0 0 30px -2px var(--pending);
+}
+
+.btn--small {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.msg--ok {
+  border-color: var(--free);
+  background: rgba(76, 195, 138, 0.1);
+  color: #a6e8c8;
+  margin-bottom: 14px;
+}
+
+/* ---------- admin: lista do zatwierdzenia ---------- */
+
+.pending {
+  margin-top: 32px;
+}
+
+.pending h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pending__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  background: var(--pending);
+  border-radius: 999px;
+  color: #1c0d02;
+  font-size: 22px;
+  box-shadow: 0 0 20px -2px var(--pending);
+}
+
+.pending h2 + p {
+  margin-top: 8px;
+}
+
+.pending__list {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pending__list button {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--pending);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.pending__list button:hover {
+  border-color: var(--pending);
+  box-shadow: 0 0 18px -6px var(--pending);
+}
+
+.pending__who {
+  color: var(--muted);
+}
+
+.pending__when::first-letter {
+  text-transform: uppercase;
 }

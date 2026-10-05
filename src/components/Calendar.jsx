@@ -6,6 +6,7 @@ const STATUS_LABEL = {
   free: 'wolny cały dzień',
   partial: 'wolne tylko niektóre godziny',
   full: 'zajęty',
+  pending: 'termin oczekuje na zatwierdzenie',
 };
 
 function Chevron({ dir }) {
@@ -27,6 +28,7 @@ export default function Calendar({
   lead,
   days,
   statusByDay,
+  pendingByDay,
   loading,
   selected,
   today,
@@ -65,6 +67,7 @@ export default function Calendar({
         {days.map((iso) => {
           const past = iso < today;
           const status = statusByDay[iso] || 'free';
+          const mixedPending = Boolean(pendingByDay[iso]) && status !== 'pending';
           const cls = [
             'day',
             loading ? 'day--loading' : `day--${status}`,
@@ -81,11 +84,16 @@ export default function Calendar({
               disabled={past && lockPast}
               aria-pressed={selected === iso}
               aria-label={`${formatDayLong(iso)}, ${
-                past && lockPast ? 'termin minął' : loading ? 'wczytywanie' : STATUS_LABEL[status]
+                past && lockPast
+                  ? 'termin minął'
+                  : loading
+                  ? 'wczytywanie'
+                  : STATUS_LABEL[status] + (mixedPending ? ', w tym terminy oczekujące na zatwierdzenie' : '')
               }`}
               onClick={() => onSelect(iso)}
             >
               <span className="day__num">{Number(iso.slice(8))}</span>
+              {!loading && mixedPending && !(past && lockPast) && <span className="day__dot" />}
               <span className="day__bar" />
             </button>
           );
@@ -98,6 +106,9 @@ export default function Calendar({
         </li>
         <li style={{ '--c': 'var(--partial)' }}>
           <i /> Wolne tylko niektóre godziny
+        </li>
+        <li style={{ '--c': 'var(--pending)' }}>
+          <i className="legend__pending" /> Oczekuje na zatwierdzenie
         </li>
         <li style={{ '--c': 'var(--full)' }}>
           <i /> Zajęty

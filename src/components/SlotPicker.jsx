@@ -39,7 +39,7 @@ export default function SlotPicker({ busy, blocked, value, onChange, disabled })
           const on = value && i >= value.from && i <= value.to && !disabled;
           const cls = [
             'slot',
-            busy[i] ? 'slot--busy' : '',
+            busy[i] === 'pending' ? 'slot--pending' : busy[i] ? 'slot--busy' : '',
             !busy[i] && blocked[i] ? 'slot--past' : '',
             on ? 'slot--on' : '',
             disabled ? 'slot--off' : '',
@@ -53,7 +53,9 @@ export default function SlotPicker({ busy, blocked, value, onChange, disabled })
               className={cls}
               disabled={disabled || busy[i] || blocked[i]}
               aria-pressed={Boolean(on)}
-              aria-label={`${minToTime(s)}${busy[i] ? ', zajęte' : ''}`}
+              aria-label={`${minToTime(s)}${
+                busy[i] === 'pending' ? ', oczekuje na zatwierdzenie' : busy[i] ? ', zajęte' : ''
+              }`}
               onClick={() => click(i)}
             >
               {minToTime(s)}

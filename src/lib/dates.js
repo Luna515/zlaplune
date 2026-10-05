@@ -67,14 +67,21 @@ export const SLOTS = Array.from(
   (_, i) => DAY_START * 60 + i * STEP
 );
 
-// wiersz z bazy -> przedział w minutach
-export const toInterval = (row) =>
-  row.all_day
-    ? { start: 0, end: 1440 }
-    : { start: timeToMin(row.start_time), end: timeToMin(row.end_time) };
+// wiersz z bazy -> przedział w minutach (+ status: 'pending' albo 'accepted')
+export const toInterval = (row) => {
+  const status = row.status === 'pending' ? 'pending' : 'accepted';
+  return row.all_day
+    ? { start: 0, end: 1440, status }
+    : { start: timeToMin(row.start_time), end: timeToMin(row.end_time), status };
+};
 
+// dla każdego pola godzinowego: null (wolne) | 'pending' | 'accepted'
 export const busyMask = (intervals) =>
-  SLOTS.map((s) => intervals.some((iv) => iv.start < s + STEP && iv.end > s));
+  SLOTS.map((s) => {
+    const hits = intervals.filter((iv) => iv.start < s + STEP && iv.end > s);
+    if (hits.length === 0) return null;
+    return hits.some((h) => h.status !== 'pending') ? 'accepted' : 'pending';
+  });
 
 // 'free' = wolny cały dzień, 'partial' = część godzin, 'full' = zajęty
 export const dayStatus = (intervals) => {
@@ -98,3 +105,14 @@ export const dayStatus = (intervals) => {
   if (covered >= hi - lo - 0.5) return 'full';
   return 'partial';
 };
+
+// Kolor dnia w kalendarzu:
+// 'free' | 'partial' | 'full' | 'pending' (dzień ma tylko niezatwierdzone terminy)
+export const dayKey = (intervals) => {
+  const base = dayStatus(intervals);
+  if (base === 'free') return 'free';
+  if (!intervals.some((iv) => iv.status !== 'pending')) return 'pending';
+  return base;
+};
+
+export const dayHasPending = (intervals) => intervals.some((iv) => iv.status === 'pending');

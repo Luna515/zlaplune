@@ -11,6 +11,7 @@ import {
   toInterval,
 } from '../lib/dates';
 import { STEP } from '../config';
+import { NOT_CONFIGURED, sendAcceptedEmail } from '../lib/email';
 import SlotPicker from './SlotPicker';
 
 function errorText(err, isAdmin) {
@@ -39,6 +40,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
   );
   const busy = useMemo(() => busyMask(sorted.map(toInterval)), [sorted]);
   const hasBusy = sorted.length > 0;
+  const hasPending = sorted.some((r) => r.status === 'pending');
 
   const nowMin = isToday ? new Date().getHours() * 60 + new Date().getMinutes() : -1;
   const blocked = SLOTS.map((s) => !isAdmin && (isPast || (isToday && s < nowMin)));
@@ -46,36 +48,45 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
   const [range, setRange] = useState(null);
   const [allDay, setAllDay] = useState(false);
   const [name, setName] = useState('');
-  const [contact, setContact] = useState('');
+  const [email, setEmail] = useState('');
   const [note, setNote] = useState('');
   const [code, setCode] = useState('');
   const [hp, setHp] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [notice, setNotice] = useState('');
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [workingId, setWorkingId] = useState(null);
 
   const dayClosed = !isAdmin && isPast;
   const allDayLocked = hasBusy || (!isAdmin && isToday);
-  const canSubmit = name.trim() && (allDay || range) && !sending && !dayClosed;
+  const canSubmit =
+    name.trim() && (isAdmin || email.trim()) && (allDay || range) && !sending && !dayClosed;
 
   const startMin = range ? SLOTS[range.from] : null;
   const endMin = range ? SLOTS[range.to] + STEP : null;
+
+  // ---------- zapis (znajomy) / dodanie spotkania (admin) ----------
 
   async function submit(e) {
     e.preventDefault();
     if (!canSubmit) return;
     setError('');
+    setActionError('');
+    setNotice('');
 
     // pole-pułapka dla botów: człowiek go nie widzi
     if (!isAdmin && hp) {
-      setResult({});
+      setResult({ email: email.trim() });
       return;
     }
 
     setSending(true);
 
     if (isAdmin) {
+      // spotkania dodane przez adminkę są od razu zatwierdzone
       const { error: err } = await supabase.from('bookings').insert({
         day: iso,
         start_time: allDay ? '00:00' : minToTime(startMin),
@@ -83,6 +94,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
         all_day: allDay,
         name: name.trim(),
         note: note.trim() || null,
+        status: 'accepted',
       });
       setSending(false);
       if (err) {
@@ -103,7 +115,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
       p_end: allDay ? null : minToTime(endMin),
       p_all_day: allDay,
       p_name: name.trim(),
-      p_contact: contact.trim() || null,
+      p_email: email.trim(),
       p_note: note.trim() || null,
       p_code: needsCode ? code.trim() : null,
     });
@@ -115,15 +127,67 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
     }
     setResult({
       token: data,
+      email: email.trim(),
       when: allDay ? 'Cały dzień' : `${minToTime(startMin)}–${minToTime(endMin)}`,
     });
     onChanged();
   }
 
+  // ---------- moderacja (admin) ----------
+
+  async function notify(r) {
+    if (!r.email) {
+      setNotice('Zatwierdzone. Ten zapis nie ma adresu e-mail, więc nic nie wysłano.');
+      return;
+    }
+    try {
+      await sendAcceptedEmail(r);
+    } catch (e) {
+      setActionError(
+        e.message === NOT_CONFIGURED
+          ? 'Zatwierdzone, ale e-mail nie został wysłany: brakuje konfiguracji EmailJS (zobacz README).'
+          : 'Zatwierdzone, ale nie udało się wysłać e-maila. Użyj przycisku „Wyślij e-mail ponownie”.'
+      );
+      return;
+    }
+    await supabase.from('bookings').update({ notified_at: new Date().toISOString() }).eq('id', r.id);
+    setNotice(`Zatwierdzone. E-mail wysłano na ${r.email}.`);
+  }
+
+  async function accept(r) {
+    setWorkingId(r.id);
+    setActionError('');
+    setNotice('');
+    const { data, error: err } = await supabase
+      .from('bookings')
+      .update({ status: 'accepted' })
+      .eq('id', r.id)
+      .select();
+    if (err || !data || data.length === 0) {
+      setWorkingId(null);
+      setActionError('Nie udało się zatwierdzić spotkania.');
+      return;
+    }
+    await notify(r);
+    setWorkingId(null);
+    onChanged();
+  }
+
+  async function resend(r) {
+    setWorkingId(r.id);
+    setActionError('');
+    setNotice('');
+    await notify(r);
+    setWorkingId(null);
+    onChanged();
+  }
+
   async function remove(id) {
-    if (!window.confirm('Usunąć to spotkanie?')) return;
+    if (!window.confirm('Usunąć to spotkanie? Znajomy nie dostanie o tym wiadomości.')) return;
+    setActionError('');
+    setNotice('');
     const { error: err } = await supabase.from('bookings').delete().eq('id', id);
-    if (err) setError('Nie udało się usunąć spotkania.');
+    if (err) setActionError('Nie udało się usunąć spotkania.');
     else onChanged();
   }
 
@@ -136,17 +200,23 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
     }
   }
 
-  // ---- widok po udanym zapisie ----
+  // ---------- widok po wysłaniu formularza ----------
   if (result) {
     const url = result.token
       ? `${window.location.origin}${window.location.pathname}#/anuluj/${result.token}`
       : '';
     return (
       <div className="panel" aria-live="polite">
-        <h2>Zapisane</h2>
+        <h2>Wysłane</h2>
+        <p className="badge badge--pending">Czeka na zatwierdzenie</p>
         <p className="panel__sub">
           {formatDayLong(iso)}
           {result.when ? `, ${result.when}` : ''}
+        </p>
+        <p>
+          Twój termin jest w trakcie rozpatrywania. Gdy go zatwierdzę, dostaniesz wiadomość
+          na adres <strong>{result.email}</strong>. Do tego czasu termin jest zarezerwowany
+          dla Ciebie.
         </p>
         {url && (
           <>
@@ -185,28 +255,80 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
         {hasBusy ? (isAdmin ? 'Spotkania tego dnia' : 'Zajęte terminy tego dnia') : 'Nic jeszcze nie zaplanowano'}
       </p>
 
+      {hasPending && !isAdmin && (
+        <p className="hint hint--pending">
+          Terminy oznaczone na pomarańczowo czekają na moje zatwierdzenie i są na razie zajęte.
+        </p>
+      )}
+
       {hasBusy && (
         <ul className="entries">
-          {sorted.map((r) => (
-            <li key={r.id || `${r.start_time}-${r.end_time}`} className="entry">
-              <div>
-                <strong>{rowLabel(r)}</strong>
+          {sorted.map((r) => {
+            const pending = r.status === 'pending';
+            return (
+              <li key={r.id || `${r.start_time}-${r.end_time}`} className={`entry ${pending ? 'entry--pending' : ''}`}>
+                <div>
+                  <strong>{rowLabel(r)}</strong>{' '}
+                  <span className={`badge ${pending ? 'badge--pending' : 'badge--accepted'}`}>
+                    {pending ? 'Oczekuje na zatwierdzenie' : isAdmin ? 'Zatwierdzone' : 'Zajęte'}
+                  </span>
+                  {isAdmin && (
+                    <>
+                      <div>{r.name}</div>
+                      {r.email && (
+                        <div className="muted">
+                          E-mail: <a href={`mailto:${r.email}`}>{r.email}</a>
+                        </div>
+                      )}
+                      {r.note && <div className="muted">{r.note}</div>}
+                      {!pending && r.email && r.notified_at && (
+                        <div className="muted">E-mail o zatwierdzeniu wysłano</div>
+                      )}
+                    </>
+                  )}
+                </div>
                 {isAdmin && (
-                  <>
-                    <div>{r.name}</div>
-                    {r.contact && <div className="muted">Kontakt: {r.contact}</div>}
-                    {r.note && <div className="muted">{r.note}</div>}
-                  </>
+                  <div className="entry__actions">
+                    {pending && (
+                      <button
+                        type="button"
+                        className="btn btn--accept"
+                        disabled={workingId === r.id}
+                        onClick={() => accept(r)}
+                      >
+                        {workingId === r.id ? 'Zatwierdzam…' : 'Zaakceptuj'}
+                      </button>
+                    )}
+                    {!pending && r.email && !r.notified_at && (
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--small"
+                        disabled={workingId === r.id}
+                        onClick={() => resend(r)}
+                      >
+                        Wyślij e-mail ponownie
+                      </button>
+                    )}
+                    <button type="button" className="btn btn--danger" onClick={() => remove(r.id)}>
+                      Usuń
+                    </button>
+                  </div>
                 )}
-              </div>
-              {isAdmin && (
-                <button type="button" className="btn btn--danger" onClick={() => remove(r.id)}>
-                  Usuń
-                </button>
-              )}
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
+      )}
+
+      {notice && (
+        <p className="msg msg--ok" role="status">
+          {notice}
+        </p>
+      )}
+      {actionError && (
+        <p className="msg msg--error" role="alert">
+          {actionError}
+        </p>
       )}
 
       {dayClosed ? (
@@ -259,12 +381,15 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
 
           {!isAdmin && (
             <label className="field">
-              <span>Kontakt (opcjonalnie)</span>
+              <span>E-mail (wyślę tu potwierdzenie)</span>
               <input
-                value={contact}
-                maxLength={100}
-                placeholder="telefon, e-mail albo Instagram"
-                onChange={(e) => setContact(e.target.value)}
+                type="email"
+                value={email}
+                maxLength={200}
+                required
+                autoComplete="email"
+                placeholder="twoj@email.pl"
+                onChange={(e) => setEmail(e.target.value)}
               />
             </label>
           )}
@@ -300,7 +425,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
           )}
 
           <button type="submit" className="btn" disabled={!canSubmit}>
-            {sending ? 'Zapisuję…' : isAdmin ? 'Dodaj spotkanie' : 'Zapisz się'}
+            {sending ? 'Wysyłam…' : isAdmin ? 'Dodaj spotkanie' : 'Wyślij prośbę o spotkanie'}
           </button>
         </form>
       )}

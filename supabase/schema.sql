@@ -27,7 +27,10 @@ create table if not exists public.bookings (
   all_day      boolean not null default false,
   name         text not null check (char_length(name) between 1 and 60),
   contact      text check (char_length(contact) <= 100),
+  email        text check (char_length(email) <= 200),
   note         text check (char_length(note) <= 300),
+  status       text not null default 'pending' check (status in ('pending', 'accepted')),
+  notified_at  timestamptz,
   cancel_token uuid not null default gen_random_uuid(),
   created_at   timestamptz not null default now(),
   check (end_time > start_time),
@@ -37,6 +40,7 @@ create table if not exists public.bookings (
 alter table public.bookings enable row level security;
 
 create index if not exists bookings_day_idx on public.bookings (day);
+create index if not exists bookings_status_idx on public.bookings (status);
 
 -- Anonimowi użytkownicy nie mają bezpośredniego dostępu do tabel.
 revoke all on public.bookings     from anon;
@@ -65,9 +69,9 @@ create policy "admin ma pelny dostep" on public.bookings
 
 -- ---------- Funkcje publiczne (dla znajomych bez kont) ----------------
 
--- Zajęte terminy w zakresie dat - bez imion i kontaktów.
+-- Zajęte terminy w zakresie dat (ze statusem) - bez imion i kontaktów.
 create or replace function public.busy_slots(p_from date, p_to date)
-returns table (day date, start_time time, end_time time, all_day boolean)
+returns table (day date, start_time time, end_time time, all_day boolean, status text)
 language plpgsql stable security definer
 set search_path = public
 as $$
@@ -76,7 +80,7 @@ begin
     raise exception 'Zakres dat jest za duży';
   end if;
   return query
-    select b.day, b.start_time, b.end_time, b.all_day
+    select b.day, b.start_time, b.end_time, b.all_day, b.status
     from public.bookings b
     where b.day between p_from and p_to
     order by b.day, b.start_time;
@@ -95,14 +99,14 @@ as $$
   );
 $$;
 
--- Zapis na termin. Zwraca token do anulowania zapisu.
+-- Zapis na termin (zawsze jako 'pending'). Zwraca token do anulowania zapisu.
 create or replace function public.book_slot(
   p_day     date,
   p_start   time,
   p_end     time,
   p_all_day boolean,
   p_name    text,
-  p_contact text default null,
+  p_email   text,
   p_note    text default null,
   p_code    text default null
 )
@@ -112,6 +116,7 @@ set search_path = public
 as $$
 declare
   v_name   text := btrim(coalesce(p_name, ''));
+  v_email  text := lower(btrim(coalesce(p_email, '')));
   v_start  time := p_start;
   v_end    time := p_end;
   v_now    timestamp := (now() at time zone 'Europe/Warsaw');
@@ -120,6 +125,10 @@ declare
 begin
   if char_length(v_name) < 1 or char_length(v_name) > 60 then
     raise exception 'Podaj imię (do 60 znaków)';
+  end if;
+
+  if char_length(v_email) > 200 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+    raise exception 'Podaj poprawny adres e-mail';
   end if;
 
   select value into v_code from public.app_settings where key = 'invite_code';
@@ -145,15 +154,16 @@ begin
   end if;
 
   if (select count(*) from public.bookings
-      where lower(name) = lower(v_name) and day >= v_now::date) >= 4 then
+      where (lower(name) = lower(v_name) or lower(email) = v_email)
+        and day >= v_now::date) >= 4 then
     raise exception 'Masz już maksymalną liczbę zapisów. Anuluj któryś lub napisz do mnie';
   end if;
 
-  insert into public.bookings (day, start_time, end_time, all_day, name, contact, note)
+  insert into public.bookings (day, start_time, end_time, all_day, name, email, note, status)
   values (
-    p_day, v_start, v_end, coalesce(p_all_day, false), v_name,
-    nullif(btrim(coalesce(p_contact, '')), ''),
-    nullif(btrim(coalesce(p_note, '')), '')
+    p_day, v_start, v_end, coalesce(p_all_day, false), v_name, v_email,
+    nullif(btrim(coalesce(p_note, '')), ''),
+    'pending'
   )
   returning cancel_token into v_token;
 
