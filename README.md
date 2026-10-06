@@ -9,6 +9,7 @@ Strona, na której znajomi proszą o spotkanie bez zakładania kont, a Ty je zat
 - Zajęcie całego dnia checkboxem
 - Panel admina z logowaniem: lista „Do zatwierdzenia”, dodawanie spotkań (od razu zatwierdzonych), usuwanie
 - Znajomi dostają link do odwołania swojego zapisu
+- Powiadomienie na Telegramie o każdej nowej prośbie, z przyciskami Zaakceptuj i Odrzuć (opcjonalne, patrz niżej)
 - Animacje (litery nagłówka, kalendarz, panel, znaczek po wysłaniu). Wyłączają się same, gdy w systemie włączono ograniczenie ruchu
 
 Stack: Vite + React + Supabase (baza i logowanie) + EmailJS (e-maile) + Vercel (hosting).
@@ -123,6 +124,69 @@ Jeśli baza działa od wcześniej, uruchom raz w SQL Editorze `supabase/migratio
 (istniejące zapisy zostają bez zmian). Jeśli wcześniej uruchomiłaś `migration_min_30_min.sql`, ta migracja ją zastępuje.
 
 Minimalną długość zmienisz w `src/config.js` (`MIN_DURATION`) i w `supabase/schema.sql` (liczba 60 minut).
+
+## Powiadomienia na Telegramie (z przyciskami Zaakceptuj / Odrzuć)
+
+Po każdej nowej prośbie bot wysyła Ci wiadomość (imię, termin, notatka; bez e-maila znajomego).
+**Zaakceptuj** zmienia status i od razu wysyła znajomemu e-mail. **Odrzuć** pyta jeszcze o potwierdzenie,
+potem usuwa prośbę (termin znów jest wolny) i, jeśli skonfigurujesz drugi szablon, wysyła znajomemu informację.
+Wszystko działa też równolegle z panelem na stronie.
+
+**1. Bot.** W Telegramie napisz do **@BotFather**: `/newbot`, podaj nazwę i login (kończy się na `bot`).
+Dostaniesz **token** (`123456:ABC...`). To hasło do bota, nikomu go nie pokazuj.
+
+**2. Sekret webhooka.** Wymyśl losowy ciąg liter i cyfr (np. 24 znaki). Zapisz go.
+
+**3. EmailJS.**
+- **Account -> API keys:** skopiuj **Private Key** (potrzebny, bo mail wychodzi z serwera). Opcję „Allow EmailJS API for non-browser applications” w Account -> Security już masz włączoną.
+- Opcjonalnie drugi szablon na odrzucenie: **To Email** `{{to_email}}`, temat `Spotkanie {{date}}, {{time}}: zmiana`,
+  treść np. „Cześć {{to_name}}, niestety nie mogę się spotkać w tym terminie ({{date}}, {{time}}). Napisz, jeśli chcesz umówić się inaczej. {{site_title}}”.
+  Skopiuj jego **Template ID**. (Darmowy plan ma 2 szablony: jeden na zatwierdzenie, drugi na odrzucenie.)
+  z7ZuE8-4Z3ds2dav5AhpP
+
+**3a. Baza.** W Supabase (SQL Editor) uruchom `supabase/migration_telegram.sql`.
+
+**4. Funkcja w Supabase.**
+- **Edge Functions -> Deploy a new function** (edytor w przeglądarce). Nazwa dokładnie: `booking-bot`.
+  Wklej całą zawartość `supabase/functions/booking-bot/index.ts` i wdróż.
+  (Alternatywa z terminala: `supabase functions deploy booking-bot --no-verify-jwt`.)
+- W ustawieniach tej funkcji **wyłącz weryfikację JWT** („Verify JWT”). Telegram nie wysyła tokena Supabase,
+  a funkcja zabezpiecza się sama (sekret webhooka i Twoje ID czatu).
+- **Edge Functions -> Secrets**, dodaj:
+
+  | Nazwa | Wartość |
+  |---|---|
+  | `TELEGRAM_BOT_TOKEN` | token z BotFather |
+  | `TELEGRAM_WEBHOOK_SECRET` | sekret z kroku 2 |
+  | `TELEGRAM_CHAT_ID` | Twoje ID czatu (krok 6) |
+  | `EMAILJS_SERVICE_ID` | jak w `.env` |
+  | `EMAILJS_TEMPLATE_ID` | szablon zatwierdzenia |
+  | `EMAILJS_PUBLIC_KEY` | jak w `.env` |
+  | `EMAILJS_PRIVATE_KEY` | Private Key z kroku 3 |
+  | `SITE_URL` | adres Twojej strony, np. `https://twoja-strona.vercel.app` |
+  | `EMAILJS_REJECT_TEMPLATE_ID` | (opcjonalnie) szablon odrzucenia |
+
+  `SUPABASE_URL` i klucz serwisowy funkcja dostaje automatycznie.
+
+**5. Webhook.** Wklej w przeglądarkę jako jeden adres (podmień TOKEN, SEKRET i PROJEKT, czyli część przed `.supabase.co`):
+
+```
+https://api.telegram.org/botTOKEN/setWebhook?url=https://PROJEKT.supabase.co/functions/v1/booking-bot&secret_token=SEKRET
+```
+
+Odpowiedź powinna zawierać `"ok":true`.
+
+**6. Twoje ID czatu.** Otwórz swojego bota w Telegramie i naciśnij **Start**. Bot odpowie „Twoje ID czatu: ...”.
+Dodaj je jako sekret `TELEGRAM_CHAT_ID` (krok 4). Jeśli po dodaniu sekretów bot nie reaguje, wdróż funkcję jeszcze raz.
+
+**7. Wdróż stronę ponownie** (kod strony zgłasza teraz zapisy botowi) i zrób testowy zapis. Wiadomość powinna przyjść po kilku sekundach.
+
+Gdy coś nie działa: **Edge Functions -> booking-bot -> Logs**. `401` oznacza niezgodny sekret webhooka,
+„Brak uprawnień” po kliknięciu to zły `TELEGRAM_CHAT_ID`. Stan webhooka sprawdzisz adresem
+`https://api.telegram.org/botTOKEN/getWebhookInfo`. Gdyby token wyciekł, w BotFather użyj `/revoke`.
+
+Uwaga: powiadomienie wysyła strona tuż po zapisie. Jeśli znajomy zamknie kartę w tej sekundzie, wiadomość może nie dojść,
+ale prośba i tak jest na liście „Do zatwierdzenia” w panelu. Każdy mail (zatwierdzenie i odrzucenie) liczy się do limitu 200 miesięcznie w EmailJS.
 
 ## Ustawienia
 

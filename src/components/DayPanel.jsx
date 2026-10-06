@@ -12,6 +12,7 @@ import {
   toInterval,
 } from '../lib/dates';
 import { MIN_DURATION } from '../config';
+import { notifyNewBooking } from '../lib/bot';
 import { NOT_CONFIGURED, sendAcceptedEmail } from '../lib/email';
 import SlotPicker from './SlotPicker';
 
@@ -132,6 +133,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
       if (err.code === '23P01') onChanged();
       return;
     }
+    notifyNewBooking(data);
     setResult({
       token: data,
       email: email.trim(),

@@ -31,6 +31,7 @@ create table if not exists public.bookings (
   note         text check (char_length(note) <= 300),
   status       text not null default 'pending' check (status in ('pending', 'accepted')),
   notified_at  timestamptz,
+  telegram_notified_at timestamptz,
   cancel_token uuid not null default gen_random_uuid(),
   created_at   timestamptz not null default now(),
   check (end_time > start_time),

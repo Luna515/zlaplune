@@ -423,6 +423,43 @@ describe('strona anulowania', () => {
   });
 });
 
+describe('powiadomienie Telegram po zapisie', () => {
+  it('po udanym zapisie strona zgłasza go funkcji booking-bot', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://proj.supabase.co');
+    const fetchSpy = vi.fn(() => Promise.resolve({}));
+    vi.stubGlobal('fetch', fetchSpy);
+    render(<App />);
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    fireEvent.click(day(15));
+    fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    fireEvent.click(screen.getByRole('button', { name: '11:00' }));
+    fireEvent.change(screen.getByLabelText('Imię'), { target: { value: 'Ania' } });
+    fillEmail();
+    fireEvent.click(screen.getByRole('button', { name: 'Wyślij prośbę o spotkanie' }));
+    await screen.findByText('Wysłane');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe('https://proj.supabase.co/functions/v1/booking-bot');
+    expect(JSON.parse(init.body)).toEqual({ action: 'notify', token: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' });
+    vi.unstubAllGlobals();
+  });
+
+  it('błąd sieci przy zgłoszeniu nie psuje potwierdzenia dla znajomego', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://proj.supabase.co');
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
+    render(<App />);
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    fireEvent.click(day(15));
+    fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    fireEvent.click(screen.getByRole('button', { name: '11:00' }));
+    fireEvent.change(screen.getByLabelText('Imię'), { target: { value: 'Ania' } });
+    fillEmail();
+    fireEvent.click(screen.getByRole('button', { name: 'Wyślij prośbę o spotkanie' }));
+    await screen.findByText('Wysłane');
+    vi.unstubAllGlobals();
+  });
+});
+
 describe('początek i koniec, minimum 1 godzina', () => {
   const setup = async () => {
     render(<App />);
