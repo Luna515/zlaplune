@@ -1174,12 +1174,6 @@ body::before {
 
 /* ---------- zamknięte dni ---------- */
 
-.day--closed .day__num {
-  text-decoration: line-through;
-  text-decoration-thickness: 3px;
-  text-decoration-color: rgba(236, 233, 226, 0.8);
-}
-
 .slot--closed {
   color: var(--muted);
   background: var(--surface);
