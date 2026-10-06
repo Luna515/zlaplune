@@ -7,6 +7,7 @@ Strona, na której znajomi proszą o spotkanie bez zakładania kont, a Ty je zat
 - Nowa prośba ma status **oczekuje**: termin jest zajęty, ale czeka na Twoją decyzję
 - Po zatwierdzeniu status zmienia się na zajęty, a znajomy dostaje e-mail
 - Zajęcie całego dnia checkboxem
+- **Zamknięcie dnia** w panelu admina: reszta godzin jest niedostępna dla znajomych, a umówione spotkania nadal widać
 - Panel admina z logowaniem: lista „Do zatwierdzenia”, dodawanie spotkań (od razu zatwierdzonych), usuwanie
 - Znajomi dostają link do odwołania swojego zapisu
 - Powiadomienie na Telegramie o każdej nowej prośbie, z przyciskami Zaakceptuj i Odrzuć (opcjonalne, patrz niżej)
@@ -142,7 +143,6 @@ Dostaniesz **token** (`123456:ABC...`). To hasło do bota, nikomu go nie pokazuj
 - Opcjonalnie drugi szablon na odrzucenie: **To Email** `{{to_email}}`, temat `Spotkanie {{date}}, {{time}}: zmiana`,
   treść np. „Cześć {{to_name}}, niestety nie mogę się spotkać w tym terminie ({{date}}, {{time}}). Napisz, jeśli chcesz umówić się inaczej. {{site_title}}”.
   Skopiuj jego **Template ID**. (Darmowy plan ma 2 szablony: jeden na zatwierdzenie, drugi na odrzucenie.)
-  z7ZuE8-4Z3ds2dav5AhpP
 
 **3a. Baza.** W Supabase (SQL Editor) uruchom `supabase/migration_telegram.sql`.
 
@@ -187,6 +187,17 @@ Gdy coś nie działa: **Edge Functions -> booking-bot -> Logs**. `401` oznacza n
 
 Uwaga: powiadomienie wysyła strona tuż po zapisie. Jeśli znajomy zamknie kartę w tej sekundzie, wiadomość może nie dojść,
 ale prośba i tak jest na liście „Do zatwierdzenia” w panelu. Każdy mail (zatwierdzenie i odrzucenie) liczy się do limitu 200 miesięcznie w EmailJS.
+
+## Zamykanie dni
+
+W panelu admina, po kliknięciu dnia, zaznacz **„Oznacz dzień jako zajęty”**. Wtedy:
+- w kalendarzu dzień jest czerwony z przekreśloną liczbą (wyróżnia się od dnia zapełnionego spotkaniami),
+- znajomi widzą tylko umówione spotkania (czerwone w paski, oczekujące pomarańczowe), a pozostałe godziny są szare i nieaktywne,
+- formularz zapisu jest ukryty, a baza odrzuca próby zapisu na ten dzień,
+- Ty nadal możesz dodawać spotkania w zamkniętym dniu. Odznaczenie pola otwiera dzień z powrotem.
+
+Do działania potrzebna jest migracja `supabase/migration_zamkniete_dni.sql` (uruchom raz w SQL Editorze, **przed** wdrożeniem nowej wersji strony).
+Bez niej strona działa, ale zamknięte dni nie będą widoczne.
 
 ## Ustawienia
 

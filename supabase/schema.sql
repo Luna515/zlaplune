@@ -45,6 +45,15 @@ alter table public.bookings enable row level security;
 create index if not exists bookings_day_idx on public.bookings (day);
 create index if not exists bookings_status_idx on public.bookings (status);
 
+-- Dni zamknięte przez adminkę: reszta dnia jest niedostępna dla znajomych,
+-- ale już umówione spotkania nadal są widoczne.
+create table if not exists public.closed_days (
+  day        date primary key,
+  created_at timestamptz not null default now()
+);
+alter table public.closed_days enable row level security;
+revoke all on public.closed_days from anon;
+
 -- Anonimowi użytkownicy nie mają bezpośredniego dostępu do tabel.
 revoke all on public.bookings     from anon;
 revoke all on public.admins       from anon, authenticated;
@@ -66,6 +75,12 @@ grant execute on function public.is_admin() to authenticated;
 -- Admin ma pełny dostęp do zapisów (podgląd, dodawanie, edycja, usuwanie)
 drop policy if exists "admin ma pelny dostep" on public.bookings;
 create policy "admin ma pelny dostep" on public.bookings
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "admin ma pelny dostep" on public.closed_days;
+create policy "admin ma pelny dostep" on public.closed_days
   for all to authenticated
   using (public.is_admin())
   with check (public.is_admin());
@@ -152,6 +167,10 @@ begin
     raise exception 'Wybierz początek i koniec: minimum 1 godzina';
   end if;
 
+  if exists (select 1 from public.closed_days where day = p_day) then
+    raise exception 'Ten dzień jest niedostępny';
+  end if;
+
   if (p_day + v_start) < v_now then
     raise exception 'Nie można zapisać się na termin z przeszłości';
   end if;
@@ -203,6 +222,26 @@ begin
   return v_count > 0;
 end;
 $$;
+
+-- Zamknięte dni w zakresie dat (dla kalendarza)
+create or replace function public.closed_days_between(p_from date, p_to date)
+returns table (day date)
+language plpgsql stable security definer
+set search_path = public
+as $$
+begin
+  if p_to - p_from > 62 then
+    raise exception 'Zakres dat jest za duży';
+  end if;
+  return query
+    select c.day from public.closed_days c
+    where c.day between p_from and p_to
+    order by c.day;
+end;
+$$;
+
+revoke all on function public.closed_days_between(date, date) from public;
+grant execute on function public.closed_days_between(date, date) to anon, authenticated;
 
 -- Uprawnienia: tylko to, co potrzebne
 revoke all on function public.busy_slots(date, date)                                   from public;

@@ -31,7 +31,7 @@ function rowLabel(r) {
   return r.all_day ? 'Cały dzień' : `${shortTime(r.start_time)}–${shortTime(r.end_time)}`;
 }
 
-export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
+export default function DayPanel({ iso, rows, isAdmin, closed = false, needsCode, onChanged }) {
   const today = todayISO();
   const isPast = iso < today;
   const isToday = iso === today;
@@ -61,6 +61,7 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
   const [workingId, setWorkingId] = useState(null);
+  const [closing, setClosing] = useState(false);
 
   const dayClosed = !isAdmin && isPast;
   const allDayLocked = hasBusy || (!isAdmin && isToday);
@@ -208,6 +209,18 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
     else onChanged();
   }
 
+  // admin: zamknięcie / otwarcie dnia
+  async function toggleClosed(next) {
+    setClosing(true);
+    setActionError('');
+    const res = next
+      ? await supabase.from('closed_days').insert({ day: iso })
+      : await supabase.from('closed_days').delete().eq('day', iso);
+    setClosing(false);
+    if (res.error) setActionError('Nie udało się zmienić statusu dnia.');
+    else onChanged();
+  }
+
   async function copyLink(url) {
     try {
       await navigator.clipboard.writeText(url);
@@ -273,8 +286,33 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
     <div key="form" className="panel">
       <h2>{formatDayLong(iso)}</h2>
       <p className="panel__sub">
-        {hasBusy ? (isAdmin ? 'Spotkania tego dnia' : 'Zajęte terminy tego dnia') : 'Nic jeszcze nie zaplanowano'}
+        {closed && !isAdmin
+          ? 'Dzień zamknięty dla nowych zapisów'
+          : hasBusy
+          ? isAdmin
+            ? 'Spotkania tego dnia'
+            : 'Zajęte terminy tego dnia'
+          : 'Nic jeszcze nie zaplanowano'}
       </p>
+
+      {isAdmin && (
+        <>
+          <label className="check check--closed">
+            <input
+              type="checkbox"
+              checked={closed}
+              disabled={closing}
+              onChange={(e) => toggleClosed(e.target.checked)}
+            />
+            <span>Oznacz dzień jako zajęty</span>
+          </label>
+          <p className="hint hint--closed-admin">
+            {closed
+              ? 'Dzień jest zamknięty: znajomi widzą tylko umówione spotkania, a resztę godzin jako niedostępną. Ty nadal możesz dodawać spotkania.'
+              : 'Zaznacz, jeśli reszta dnia ma być niedostępna dla znajomych, nawet gdy zostały wolne godziny.'}
+          </p>
+        </>
+      )}
 
       {hasPending && !isAdmin && (
         <p className="hint hint--pending">
@@ -354,6 +392,13 @@ export default function DayPanel({ iso, rows, isAdmin, needsCode, onChanged }) {
 
       {dayClosed ? (
         <p className="muted">Ten dzień już minął.</p>
+      ) : closed && !isAdmin ? (
+        <>
+          <p className="hint hint--closed">
+            Ten dzień jest zamknięty dla nowych zapisów. Poniżej widać, które godziny są już umówione.
+          </p>
+          <SlotPicker busy={busy} blocked={blocked} value={null} onChange={() => {}} closed />
+        </>
       ) : (
         <form onSubmit={submit} className="form">
           <h3>{isAdmin ? 'Dodaj spotkanie' : 'Wybierz godziny'}</h3>

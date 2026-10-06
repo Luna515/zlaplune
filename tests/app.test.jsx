@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-li
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 const h = vi.hoisted(() => {
-  const state = { busy: [], bookings: [], session: null, calls: [], updateOk: true };
+  const state = { busy: [], bookings: [], closed: [], bookError: null, session: null, calls: [], updateOk: true };
 
   const chain = (getRows) => {
     const filters = [];
@@ -23,16 +23,20 @@ const h = vi.hoisted(() => {
       state.calls.push(['rpc', name, args]);
       if (name === 'busy_slots') return { data: state.busy, error: null };
       if (name === 'requires_code') return { data: false, error: null };
-      if (name === 'book_slot') return { data: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', error: null };
+      if (name === 'closed_days_between') return { data: state.closed, error: null };
+      if (name === 'book_slot') {
+        if (state.bookError) return { data: null, error: state.bookError };
+        return { data: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', error: null };
+      }
       if (name === 'is_admin') return { data: true, error: null };
       if (name === 'booking_by_token')
         return { data: [{ day: '2026-10-15', start_time: '10:00:00', end_time: '11:30:00', all_day: false }], error: null };
       if (name === 'cancel_booking') return { data: true, error: null };
       return { data: null, error: null };
     }),
-    from: vi.fn(() => ({
+    from: vi.fn((table) => ({
       select: () => chain(() => state.bookings),
-      insert: async (row) => { state.calls.push(['insert', row]); return { error: null }; },
+      insert: async (row) => { state.calls.push(['insert', row, table]); return { error: null }; },
       update: (patch) => ({
         eq: (_c, id) => {
           state.calls.push(['update', id, patch]);
@@ -42,7 +46,7 @@ const h = vi.hoisted(() => {
           return p;
         },
       }),
-      delete: () => ({ eq: async (_c, id) => { state.calls.push(['delete', id]); return { error: null }; } }),
+      delete: () => ({ eq: async (_c, id) => { state.calls.push(['delete', id, table]); return { error: null }; } }),
     })),
     auth: {
       getSession: async () => ({ data: { session: state.session } }),
@@ -69,6 +73,8 @@ beforeEach(() => {
   h.state.calls.length = 0;
   h.state.updateOk = true;
   h.state.bookings = [];
+  h.state.closed = [];
+  h.state.bookError = null;
   h.state.busy = [
     { day: '2026-10-14', start_time: '10:00:00', end_time: '12:00:00', all_day: false, status: 'accepted' },
     { day: '2026-10-16', start_time: '00:00:00', end_time: '23:59:59', all_day: true, status: 'accepted' },
@@ -420,6 +426,89 @@ describe('strona anulowania', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Odwołaj zapis' }));
     await screen.findByText('Odwołane');
     expect(h.state.calls.find((c) => c[1] === 'cancel_booking')[2]).toEqual({ p_token: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' });
+  });
+});
+
+describe('zamknięte dni', () => {
+  beforeEach(() => {
+    h.state.closed = [{ day: '2026-10-18' }];
+    h.state.busy.push(
+      { day: '2026-10-18', start_time: '10:00:00', end_time: '12:00:00', all_day: false, status: 'accepted' },
+      { day: '2026-10-18', start_time: '15:00:00', end_time: '16:00:00', all_day: false, status: 'pending' }
+    );
+  });
+  afterEach(() => { h.state.session = null; });
+
+  it('publicznie: dzień wygląda na zajęty, spotkania widać, reszta jest wyszarzona, bez formularza', async () => {
+    render(<App />);
+    await waitFor(() => expect(day(18).className).toContain('day--closed'));
+    expect(day(18).className).toContain('day--full');
+    expect(day(18).getAttribute('aria-label')).toContain('dzień zamknięty');
+    expect(day(18).querySelector('.day__dot')).toBeTruthy(); // w tym oczekujące
+    expect(day(17).className).not.toContain('day--closed');
+    fireEvent.click(day(18));
+
+    const grey = screen.getByRole('button', { name: '09:00, niedostępne' });
+    expect(grey.disabled).toBe(true);
+    expect(grey.className).toContain('slot--closed');
+    const booked = screen.getByRole('button', { name: '10:00, zajęte' });
+    expect(booked.disabled).toBe(true);
+    expect(booked.className).toContain('slot--busy');
+    expect(booked.className).not.toContain('slot--closed');
+    expect(screen.getByRole('button', { name: '15:00, oczekuje na zatwierdzenie' }).className).toContain('slot--pending');
+    expect(screen.getByRole('button', { name: '24:00, niedostępne' }).disabled).toBe(true);
+
+    expect(screen.queryByRole('button', { name: 'Wyślij prośbę o spotkanie' })).toBeNull();
+    expect(screen.queryByLabelText('Imię')).toBeNull();
+    expect(screen.getByText(/zamknięty dla nowych zapisów\. Poniżej widać/)).toBeTruthy();
+  });
+
+  it('baza odrzuciła zapis na zamknięty dzień: komunikat dla znajomego', async () => {
+    h.state.bookError = { code: 'P0001', message: 'Ten dzień jest niedostępny' };
+    render(<App />);
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    fireEvent.click(day(15));
+    fireEvent.click(screen.getByRole('button', { name: '10:00' }));
+    fireEvent.click(screen.getByRole('button', { name: '11:00' }));
+    fireEvent.change(screen.getByLabelText('Imię'), { target: { value: 'Ania' } });
+    fillEmail();
+    fireEvent.click(screen.getByRole('button', { name: 'Wyślij prośbę o spotkanie' }));
+    await screen.findByText('Ten dzień jest niedostępny');
+  });
+
+  const adminSession = () => {
+    window.location.hash = '#/admin';
+    h.state.session = { user: { id: 'u1', email: 'luna@x.pl' } };
+    h.state.bookings = [];
+  };
+
+  it('admin: zamyka dzień i nadal może dodawać spotkania w zamkniętym dniu', async () => {
+    adminSession();
+    render(<App />);
+    await screen.findByText('Panel', { selector: 'h1' });
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    fireEvent.click(day(15));
+    const box = screen.getByLabelText('Oznacz dzień jako zajęty');
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    await waitFor(() => expect(h.state.calls.find((c) => c[0] === 'insert' && c[2] === 'closed_days')).toBeTruthy());
+    expect(h.state.calls.find((c) => c[2] === 'closed_days')[1]).toEqual({ day: '2026-10-15' });
+
+    fireEvent.click(day(18)); // dzień już zamknięty
+    expect(screen.getByLabelText('Oznacz dzień jako zajęty').checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'Dodaj spotkanie' })).toBeTruthy(); // formularz admina jest
+    expect(screen.getByRole('button', { name: '09:00' }).disabled).toBe(false); // godziny nie są wyszarzone dla admina
+  });
+
+  it('admin: odznaczenie otwiera dzień ponownie', async () => {
+    adminSession();
+    render(<App />);
+    await screen.findByText('Panel', { selector: 'h1' });
+    await waitFor(() => expect(day(18).className).toContain('day--closed'));
+    fireEvent.click(day(18));
+    fireEvent.click(screen.getByLabelText('Oznacz dzień jako zajęty'));
+    await waitFor(() => expect(h.state.calls.find((c) => c[0] === 'delete' && c[2] === 'closed_days')).toBeTruthy());
+    expect(h.state.calls.find((c) => c[2] === 'closed_days')[1]).toBe('2026-10-18');
   });
 });
 

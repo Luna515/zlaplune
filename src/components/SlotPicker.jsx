@@ -6,7 +6,7 @@ const MIN_STEPS = Math.ceil(MIN_DURATION / STEP);
 // busy[i]    - pole godzinowe zajęte ('accepted' | 'pending' | null)
 // blocked[i] - niedostępne z innego powodu (np. godzina już minęła)
 // value      - null | { start: indeks punktu, end: indeks punktu | null }
-export default function SlotPicker({ busy, blocked, value, onChange, disabled }) {
+export default function SlotPicker({ busy, blocked, value, onChange, disabled, closed = false }) {
   const free = (k) => k >= 0 && k < SLOTS.length && !busy[k] && !blocked[k];
 
   // początek jest możliwy, gdy od niego jest wolne co najmniej MIN_DURATION
@@ -32,7 +32,7 @@ export default function SlotPicker({ busy, blocked, value, onChange, disabled })
   const tooShort = (i) => endMode && i > start && i < start + MIN_STEPS;
 
   function click(i) {
-    if (disabled) return;
+    if (disabled || closed) return;
     if (endMode) {
       if (validEnd(i)) {
         onChange({ start, end: i });
@@ -48,7 +48,9 @@ export default function SlotPicker({ busy, blocked, value, onChange, disabled })
   }
 
   const minLabel = formatDuration(MIN_DURATION);
-  const hint = disabled
+  const hint = closed
+    ? 'Dzień jest zamknięty. Szare godziny są niedostępne, czerwone i pomarańczowe to umówione spotkania.'
+    : disabled
     ? 'Zajmujesz cały dzień, godziny nie są potrzebne.'
     : endMode
     ? `Teraz kliknij godzinę końca (minimum ${minLabel} od początku). Kliknij początek jeszcze raz, żeby go zdjąć.`
@@ -62,7 +64,7 @@ export default function SlotPicker({ busy, blocked, value, onChange, disabled })
         {POINTS.map((p, i) => {
           const showBusy = i < SLOTS.length && busy[i] && !(endMode && validEnd(i));
           const clickable =
-            !disabled && (endMode ? i === start || validEnd(i) || (validStart(i) && !tooShort(i)) : validStart(i));
+            !disabled && !closed && (endMode ? i === start || validEnd(i) || (validStart(i) && !tooShort(i)) : validStart(i));
           const isFrom = !disabled && i === start;
           const isTo = !disabled && i === end;
           const inRange = !disabled && start !== null && end !== null && i > start && i < end;
@@ -70,7 +72,8 @@ export default function SlotPicker({ busy, blocked, value, onChange, disabled })
             'slot',
             showBusy ? (busy[i] === 'pending' ? 'slot--pending' : 'slot--busy') : '',
             !showBusy && i < SLOTS.length && blocked[i] ? 'slot--past' : '',
-            !showBusy && !clickable && !disabled && !(i < SLOTS.length && blocked[i]) ? 'slot--na' : '',
+            !showBusy && !clickable && !disabled && !closed && !(i < SLOTS.length && blocked[i]) ? 'slot--na' : '',
+            closed && !showBusy ? 'slot--closed' : '',
             endMode && validEnd(i) ? 'slot--end' : '',
             isFrom || isTo ? 'slot--on' : '',
             inRange ? 'slot--range' : '',
@@ -86,7 +89,7 @@ export default function SlotPicker({ busy, blocked, value, onChange, disabled })
               disabled={!clickable}
               aria-pressed={isFrom || isTo || inRange}
               aria-label={`${minToTime(p)}${
-                showBusy ? (busy[i] === 'pending' ? ', oczekuje na zatwierdzenie' : ', zajęte') : ''
+                showBusy ? (busy[i] === 'pending' ? ', oczekuje na zatwierdzenie' : ', zajęte') : closed ? ', niedostępne' : ''
               }`}
               style={{ '--i': i }}
               onClick={() => click(i)}

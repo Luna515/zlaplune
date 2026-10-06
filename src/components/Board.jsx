@@ -23,6 +23,7 @@ export default function Board({ mode }) {
 
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [rows, setRows] = useState([]);
+  const [closedDays, setClosedDays] = useState([]);
   const [pendingItems, setPendingItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -40,18 +41,24 @@ export default function Board({ mode }) {
     setLoading(true);
     setLoadError('');
     (async () => {
-      const res = isAdmin
-        ? await supabase
+      const rowsQuery = isAdmin
+        ? supabase
             .from('bookings')
             .select('*')
             .gte('day', from)
             .lte('day', to)
             .order('day')
             .order('start_time')
-        : await supabase.rpc('busy_slots', { p_from: from, p_to: to });
+        : supabase.rpc('busy_slots', { p_from: from, p_to: to });
+      const [res, closedRes] = await Promise.all([
+        rowsQuery,
+        supabase.rpc('closed_days_between', { p_from: from, p_to: to }),
+      ]);
       if (cancelled) return;
       if (res.error) setLoadError('Nie udało się wczytać kalendarza. Odśwież stronę.');
       else setRows(res.data || []);
+      // brak funkcji (przed migracją) traktujemy jak brak zamkniętych dni
+      setClosedDays(closedRes.error ? [] : (closedRes.data || []).map((r) => r.day));
       setLoading(false);
     })();
     return () => {
@@ -88,16 +95,19 @@ export default function Board({ mode }) {
     return map;
   }, [rows]);
 
+  const closedSet = useMemo(() => new Set(closedDays), [closedDays]);
+
   const { statusByDay, pendingByDay } = useMemo(() => {
     const status = {};
     const pending = {};
     for (const iso of days) {
       const intervals = (rowsByDay[iso] || []).map(toInterval);
-      status[iso] = dayKey(intervals);
+      // dzień zamknięty wygląda jak zajęty, nawet gdy zostały wolne godziny
+      status[iso] = closedSet.has(iso) ? 'full' : dayKey(intervals);
       pending[iso] = dayHasPending(intervals);
     }
     return { statusByDay: status, pendingByDay: pending };
-  }, [days, rowsByDay]);
+  }, [days, rowsByDay, closedSet]);
 
   function selectDay(iso) {
     setSelected(iso);
@@ -141,6 +151,7 @@ export default function Board({ mode }) {
             days={days}
             statusByDay={statusByDay}
             pendingByDay={pendingByDay}
+            closedSet={closedSet}
             loading={loading}
             dir={dir}
             selected={selected}
@@ -166,6 +177,7 @@ export default function Board({ mode }) {
               iso={selected}
               rows={rowsByDay[selected] || []}
               isAdmin={isAdmin}
+              closed={closedSet.has(selected)}
               needsCode={needsCode}
               onChanged={() => setVersion((v) => v + 1)}
             />

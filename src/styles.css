@@ -1171,3 +1171,36 @@ body::before {
     stroke-dashoffset: 0 !important;
   }
 }
+
+/* ---------- zamknięte dni ---------- */
+
+.day--closed .day__num {
+  text-decoration: line-through;
+  text-decoration-thickness: 3px;
+  text-decoration-color: rgba(236, 233, 226, 0.8);
+}
+
+.slot--closed {
+  color: var(--muted);
+  background: var(--surface);
+  border-color: var(--line);
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.check--closed {
+  margin-bottom: 4px;
+}
+
+.hint--closed-admin {
+  margin: 0 0 18px;
+}
+
+.hint--closed {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--muted);
+  background: rgba(143, 148, 156, 0.1);
+  color: var(--text);
+}

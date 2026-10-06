@@ -29,6 +29,7 @@ export default function Calendar({
   days,
   statusByDay,
   pendingByDay,
+  closedSet,
   loading,
   dir,
   selected,
@@ -69,11 +70,13 @@ export default function Calendar({
           const past = iso < today;
           const status = statusByDay[iso] || 'free';
           const mixedPending = Boolean(pendingByDay[iso]) && status !== 'pending';
+          const closed = closedSet.has(iso);
           const cls = [
             'day',
             loading ? 'day--loading' : `day--${status}`,
             past ? 'day--past' : '',
             iso === today ? 'day--today' : '',
+            closed ? 'day--closed' : '',
           ]
             .filter(Boolean)
             .join(' ');
@@ -89,7 +92,7 @@ export default function Calendar({
                   ? 'termin minął'
                   : loading
                   ? 'wczytywanie'
-                  : STATUS_LABEL[status] + (mixedPending ? ', w tym terminy oczekujące na zatwierdzenie' : '')
+                  : (closed ? 'dzień zamknięty' : STATUS_LABEL[status]) + (mixedPending ? ', w tym terminy oczekujące na zatwierdzenie' : '')
               }`}
               style={{ '--i': idx + lead }}
               onClick={() => onSelect(iso)}
