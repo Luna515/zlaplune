@@ -11,6 +11,7 @@ Strona, na której znajomi proszą o spotkanie bez zakładania kont, a Ty je zat
 - Panel admina z logowaniem: lista „Do zatwierdzenia”, dodawanie spotkań (od razu zatwierdzonych), usuwanie
 - Znajomi dostają link do odwołania swojego zapisu
 - Powiadomienie na Telegramie o każdej nowej prośbie, z przyciskami Zaakceptuj i Odrzuć (opcjonalne, patrz niżej)
+- Można ją zainstalować na telefonie jak aplikację (PWA, patrz niżej)
 - Animacje (litery nagłówka, kalendarz, panel, znaczek po wysłaniu). Wyłączają się same, gdy w systemie włączono ograniczenie ruchu
 
 Stack: Vite + React + Supabase (baza i logowanie) + EmailJS (e-maile) + Vercel (hosting).
@@ -187,6 +188,35 @@ Gdy coś nie działa: **Edge Functions -> booking-bot -> Logs**. `401` oznacza n
 
 Uwaga: powiadomienie wysyła strona tuż po zapisie. Jeśli znajomy zamknie kartę w tej sekundzie, wiadomość może nie dojść,
 ale prośba i tak jest na liście „Do zatwierdzenia” w panelu. Każdy mail (zatwierdzenie i odrzucenie) liczy się do limitu 200 miesięcznie w EmailJS.
+
+## Aplikacja na telefonie (PWA)
+
+Strona da się zainstalować jak aplikację: ma własną ikonę na ekranie głównym i otwiera się bez paska przeglądarki.
+Aplikacja nadal potrzebuje internetu, bo kalendarz zawsze pobiera aktualne dane (nieaktualny kalendarz pozwoliłby wybrać zajęty termin).
+Na telefon trafiają tylko pliki wyglądu, więc po każdym wdrożeniu nowa wersja pojawia się sama przy następnym otwarciu.
+
+**Instalacja**
+- **Android (Chrome):** menu `⋮` -> „Zainstaluj aplikację” albo „Dodaj do ekranu głównego”. Po przytrzymaniu ikony jest skrót „Panel admina”.
+- **iPhone (Safari):** Udostępnij -> „Dodaj do ekranu głównego”. Na iPhonie nie ma skrótu do panelu.
+  Uwaga: aplikacja na iPhonie ma osobną pamięć niż Safari, więc w panelu admina zalogujesz się w niej od nowa.
+
+**Własna ikona.** Teraz jest tymczasowa (litera L). Żeby ją zmienić, podmień pliki o tych samych nazwach, bez zmian w kodzie:
+
+| Plik w `public/` | Rozmiar | Uwagi |
+|---|---|---|
+| `icons/icon-512.png` | 512x512 | ikona główna |
+| `icons/icon-192.png` | 192x192 | ta sama grafika, mniejsza |
+| `icons/maskable-512.png` | 512x512 | pełne tło do krawędzi, ważne elementy w środkowych 80% (Android przycina ikonę do koła lub zaokrąglenia) |
+| `icons/apple-touch-icon.png` | 180x180 | iPhone, **bez przezroczystości** (przezroczyste miejsca zrobią się czarne) |
+| `icons/favicon-48.png` | 48x48 | karta przeglądarki |
+| `favicon.svg` | dowolny | karta przeglądarki (może być prosta wersja) |
+
+Po wdrożeniu nowej ikony na telefonie trzeba **odinstalować i dodać aplikację jeszcze raz**, bo system zapamiętuje starą.
+Nazwę i kolory aplikacji zmienisz w `public/manifest.webmanifest`.
+
+**Jak sprawdzić, że działa:** otwórz stronę w Chrome na komputerze, F12 -> zakładka **Application** -> **Manifest**
+(nie powinno być błędów, widać ikony) oraz **Service Workers** (status „activated”). Instalacja działa tylko na stronie
+z `https`, czyli na Vercelu tak, a lokalnie przez `npm run dev` nie (service worker włącza się tylko w wersji produkcyjnej).
 
 ## Zamykanie dni
 

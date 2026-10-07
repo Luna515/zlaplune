@@ -6,9 +6,12 @@ import '@fontsource/schibsted-grotesk/400';
 import '@fontsource/schibsted-grotesk/600';
 import './styles.css';
 import App from './App.jsx';
+import { registerServiceWorker } from './pwa.js';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+
+registerServiceWorker();
