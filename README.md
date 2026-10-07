@@ -11,6 +11,7 @@ Strona, na której znajomi proszą o spotkanie bez zakładania kont, a Ty je zat
 - Panel admina z logowaniem: lista „Do zatwierdzenia”, dodawanie spotkań (od razu zatwierdzonych), usuwanie
 - Znajomi dostają link do odwołania swojego zapisu
 - Powiadomienie na Telegramie o każdej nowej prośbie, z przyciskami Zaakceptuj i Odrzuć (opcjonalne, patrz niżej)
+- Tło strony (obraz, GIF albo wideo) ustawiane z panelu admina, ze suwakiem widoczności
 - Można ją zainstalować na telefonie jak aplikację (PWA, patrz niżej)
 - Animacje (litery nagłówka, kalendarz, panel, znaczek po wysłaniu). Wyłączają się same, gdy w systemie włączono ograniczenie ruchu
 
@@ -188,6 +189,27 @@ Gdy coś nie działa: **Edge Functions -> booking-bot -> Logs**. `401` oznacza n
 
 Uwaga: powiadomienie wysyła strona tuż po zapisie. Jeśli znajomy zamknie kartę w tej sekundzie, wiadomość może nie dojść,
 ale prośba i tak jest na liście „Do zatwierdzenia” w panelu. Każdy mail (zatwierdzenie i odrzucenie) liczy się do limitu 200 miesięcznie w EmailJS.
+
+## Tło strony (obraz, GIF, wideo)
+
+W panelu admina, nad kalendarzem, jest rozwijana sekcja **„Tło strony”**:
+- **Plik:** JPG, PNG, WebP, GIF, MP4 lub WebM, do 20 MB. Wideo i GIF odtwarzają się w pętli, bez dźwięku.
+- **Widoczność tła:** suwak 0 do 100% (to jest opacity). Podgląd zmienia się od razu na stronie, a zapis idzie sam po chwili.
+- **Usuń tło:** kasuje plik i ustawienia.
+- Zamiana tła na nowe usuwa stary plik automatycznie.
+
+**Potrzebna migracja:** uruchom raz w SQL Editorze `supabase/migration_tlo.sql`. Tworzy tabelę z ustawieniami i publiczny kubełek `backgrounds`.
+Pliki może wgrywać i usuwać tylko admin, a odczyt jest publiczny, bo strona musi je pokazać każdemu.
+Gdyby kubełek nie utworzył się sam, dodaj go ręcznie: **Storage -> New bucket**, nazwa `backgrounds`, zaznaczone **Public bucket**.
+
+**Rozmiar pliku ma znaczenie.** Każdy odwiedzający pobiera tło, a darmowy plan Supabase ma limit transferu (5 GB miesięcznie).
+Plik 20 MB pobrany 250 razy to cały limit. Dlatego:
+- trzymaj tło małe, najlepiej do 5 MB,
+- zamiast GIF-a użyj krótkiego MP4 lub WebM, bo jest wielokrotnie lżejszy przy tej samej jakości,
+- obrazy warto wcześniej zmniejszyć (np. szerokość 1920 px).
+
+U osób z włączonym w systemie ograniczeniem ruchu wideo i GIF-y nie pokazują się (zwykły obraz tak), więc ich też możesz nie widzieć u siebie.
+Przy dużej widoczności tło może zmniejszyć czytelność nagłówka, dlatego dobrze sprawdza się 20 do 40%.
 
 ## Aplikacja na telefonie (PWA)
 

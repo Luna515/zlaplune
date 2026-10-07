@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-li
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 const h = vi.hoisted(() => {
-  const state = { busy: [], bookings: [], closed: [], bookError: null, session: null, calls: [], updateOk: true };
+  const state = { busy: [], bookings: [], closed: [], background: null, bgError: null, uploadError: null, bookError: null, session: null, calls: [], updateOk: true };
 
   const chain = (getRows) => {
     const filters = [];
@@ -34,7 +34,20 @@ const h = vi.hoisted(() => {
       if (name === 'cancel_booking') return { data: true, error: null };
       return { data: null, error: null };
     }),
-    from: vi.fn((table) => ({
+    storage: {
+      from: (bucket) => ({
+        upload: async (path, file, opts) => {
+          state.calls.push(['upload', bucket, path, opts, file]);
+          return state.uploadError ? { data: null, error: state.uploadError } : { data: { path }, error: null };
+        },
+        getPublicUrl: (path) => ({ data: { publicUrl: `https://proj.supabase.co/storage/v1/object/public/${bucket}/${path}` } }),
+        remove: async (paths) => { state.calls.push(['remove', bucket, paths]); return { data: [], error: null }; },
+      }),
+    },
+    from: vi.fn((table) => table === 'site_background' ? ({
+      select: () => ({ maybeSingle: async () => ({ data: state.background, error: null }) }),
+      upsert: async (row) => { state.calls.push(['bg-upsert', row]); return { error: state.bgError }; },
+    }) : ({
       select: () => chain(() => state.bookings),
       insert: async (row) => { state.calls.push(['insert', row, table]); return { error: null }; },
       update: (patch) => ({
@@ -75,6 +88,9 @@ beforeEach(() => {
   h.state.bookings = [];
   h.state.closed = [];
   h.state.bookError = null;
+  h.state.background = null;
+  h.state.bgError = null;
+  h.state.uploadError = null;
   h.state.busy = [
     { day: '2026-10-14', start_time: '10:00:00', end_time: '12:00:00', all_day: false, status: 'accepted' },
     { day: '2026-10-16', start_time: '00:00:00', end_time: '23:59:59', all_day: true, status: 'accepted' },
@@ -509,6 +525,175 @@ describe('zamknięte dni', () => {
     fireEvent.click(screen.getByLabelText('Oznacz dzień jako zajęty'));
     await waitFor(() => expect(h.state.calls.find((c) => c[0] === 'delete' && c[2] === 'closed_days')).toBeTruthy());
     expect(h.state.calls.find((c) => c[2] === 'closed_days')[1]).toBe('2026-10-18');
+  });
+});
+
+describe('tło strony', () => {
+  const IMG = { url: 'https://proj.supabase.co/storage/v1/object/public/backgrounds/1-a.png', kind: 'image', storage_path: '1-a.png', opacity: 0.4 };
+  const VID = { url: 'https://proj.supabase.co/storage/v1/object/public/backgrounds/2-b.mp4', kind: 'video', storage_path: '2-b.mp4', opacity: 0.25 };
+  afterEach(() => { h.state.session = null; });
+
+  it('bez ustawionego tła nic się nie renderuje', async () => {
+    const { container } = render(<App />);
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    expect(container.querySelector('.bg-media')).toBeNull();
+  });
+
+  it('obraz: pojawia się po załadowaniu, z ustawioną widocznością', async () => {
+    h.state.background = IMG;
+    const { container } = render(<App />);
+    const img = await waitFor(() => {
+      const el = container.querySelector('img.bg-media');
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(img.getAttribute('src')).toBe(IMG.url);
+    expect(img.style.getPropertyValue('--bg-opacity')).toBe('0.4');
+    expect(img.getAttribute('aria-hidden')).toBe('true');
+    expect(img.className).not.toContain('is-ready');
+    fireEvent.load(img);
+    expect(container.querySelector('img.bg-media').className).toContain('is-ready');
+  });
+
+  it('wideo: w pętli, bez dźwięku, odtwarzane automatycznie', async () => {
+    h.state.background = VID;
+    const { container } = render(<App />);
+    const video = await waitFor(() => {
+      const el = container.querySelector('video.bg-media');
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(video.loop).toBe(true);
+    expect(video.muted).toBe(true);
+    expect(video.autoplay).toBe(true);
+    expect(video.getAttribute('playsinline')).not.toBeNull();
+    expect(video.style.getPropertyValue('--bg-opacity')).toBe('0.25');
+  });
+
+  it('adres inny niż https nie jest używany', async () => {
+    h.state.background = { ...IMG, url: 'http://obcy.example/x.png' };
+    const { container } = render(<App />);
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    expect(container.querySelector('.bg-media')).toBeNull();
+  });
+
+  it('ograniczenie ruchu w systemie: wideo i GIF ukryte, zwykły obraz zostaje', async () => {
+    window.matchMedia = (q) => ({ matches: q.includes('reduce'), media: q, addEventListener() {}, removeEventListener() {} });
+    h.state.background = VID;
+    const a = render(<App />);
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    expect(a.container.querySelector('.bg-media')).toBeNull();
+    a.unmount();
+
+    h.state.background = { ...IMG, url: 'https://x.co/a.gif' };
+    const b = render(<App />);
+    await waitFor(() => expect(day(15).className).toContain('day--free'));
+    expect(b.container.querySelector('.bg-media')).toBeNull();
+    b.unmount();
+
+    h.state.background = IMG;
+    const c = render(<App />);
+    await waitFor(() => expect(c.container.querySelector('img.bg-media')).toBeTruthy());
+  });
+
+  describe('edytor w panelu admina', () => {
+    const open = async () => {
+      window.location.hash = '#/admin';
+      h.state.session = { user: { id: 'u1', email: 'luna@x.pl' } };
+      const r = render(<App />);
+      await screen.findByText('Panel', { selector: 'h1' });
+      return r;
+    };
+    const file = (name, type, size = 1000) => {
+      const f = new File(['x'], name, { type });
+      Object.defineProperty(f, 'size', { value: size });
+      return f;
+    };
+    const choose = (f) =>
+      fireEvent.change(document.querySelector('input[type=file]'), { target: { files: [f] } });
+
+    it('wgranie filmu: plik trafia do kubełka, ustawienia do bazy, podgląd działa od razu', async () => {
+      const { container } = await open();
+      choose(file('Mój film ł.mp4', 'video/mp4', 3 * 1024 * 1024));
+      await screen.findByText('Tło ustawione.');
+
+      const up = h.state.calls.find((c) => c[0] === 'upload');
+      expect(up[1]).toBe('backgrounds');
+      expect(up[2]).toMatch(/^\d+-Moj-film-l\.mp4$/);
+      expect(up[3]).toMatchObject({ cacheControl: '31536000', upsert: false });
+
+      const row = h.state.calls.find((c) => c[0] === 'bg-upsert')[1];
+      expect(row).toMatchObject({ id: true, kind: 'video', storage_path: up[2], opacity: 0.35 });
+      expect(row.url).toBe(`https://proj.supabase.co/storage/v1/object/public/backgrounds/${up[2]}`);
+      expect(container.querySelector('video.bg-media')).toBeTruthy();
+    });
+
+    it('zamiana tła usuwa poprzedni plik z kubełka', async () => {
+      h.state.background = IMG;
+      await open();
+      await waitFor(() => expect(document.querySelector('summary').textContent).toContain('obraz'));
+      choose(file('nowe.png', 'image/png'));
+      await screen.findByText('Tło ustawione.');
+      expect(h.state.calls.find((c) => c[0] === 'remove')[2]).toEqual(['1-a.png']);
+    });
+
+    it('zły typ pliku i za duży plik: komunikat, nic się nie wysyła', async () => {
+      await open();
+      choose(file('dokument.pdf', 'application/pdf'));
+      await screen.findByText(/Obsługiwane pliki/);
+      choose(file('duze.mp4', 'video/mp4', 25 * 1024 * 1024));
+      await screen.findByText(/Plik jest za duży/);
+      expect(h.state.calls.find((c) => c[0] === 'upload')).toBeUndefined();
+    });
+
+    it('błąd wgrywania: komunikat i brak zapisu w bazie', async () => {
+      h.state.uploadError = { message: 'denied' };
+      await open();
+      choose(file('a.png', 'image/png'));
+      await screen.findByText(/Nie udało się wgrać pliku/);
+      expect(h.state.calls.find((c) => c[0] === 'bg-upsert')).toBeUndefined();
+    });
+
+    it('błąd zapisu ustawień: wgrany plik jest sprzątany', async () => {
+      h.state.bgError = { message: 'rls' };
+      await open();
+      choose(file('a.png', 'image/png'));
+      await screen.findByText(/nie udało się zapisać ustawień/);
+      const up = h.state.calls.find((c) => c[0] === 'upload');
+      expect(h.state.calls.find((c) => c[0] === 'remove')[2]).toEqual([up[2]]);
+    });
+
+    it('suwak zmienia widoczność od razu, a zapis idzie z opóźnieniem', async () => {
+      h.state.background = IMG;
+      const { container } = await open();
+      await waitFor(() => expect(container.querySelector('img.bg-media')).toBeTruthy());
+      const slider = screen.getByLabelText('Widoczność tła');
+      expect(slider.value).toBe('40');
+      fireEvent.change(slider, { target: { value: '65' } });
+      expect(screen.getByText('Widoczność tła: 65%')).toBeTruthy();
+      expect(container.querySelector('img.bg-media').style.getPropertyValue('--bg-opacity')).toBe('0.65');
+      expect(h.state.calls.find((c) => c[0] === 'bg-upsert')).toBeUndefined(); // jeszcze nie zapisano
+      await waitFor(() => expect(h.state.calls.find((c) => c[0] === 'bg-upsert')).toBeTruthy(), { timeout: 2000 });
+      fireEvent.change(slider, { target: { value: '66' } });
+      fireEvent.change(slider, { target: { value: '70' } });
+      await waitFor(() => expect(h.state.calls.filter((c) => c[0] === 'bg-upsert')).toHaveLength(2), { timeout: 2000 });
+      const rows = h.state.calls.filter((c) => c[0] === 'bg-upsert').map((c) => c[1]);
+      expect(rows[0]).toMatchObject({ id: true, opacity: 0.65 });
+      expect(rows[1]).toMatchObject({ id: true, opacity: 0.7 });
+      expect(rows[0].url).toBeUndefined(); // zmiana widoczności nie rusza pliku
+    });
+
+    it('usunięcie tła kasuje plik i czyści ustawienia', async () => {
+      h.state.background = VID;
+      const { container } = await open();
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      await waitFor(() => expect(container.querySelector('video.bg-media')).toBeTruthy());
+      fireEvent.click(screen.getByRole('button', { name: 'Usuń tło' }));
+      await screen.findByText('Tło usunięte.');
+      expect(h.state.calls.find((c) => c[0] === 'remove')[2]).toEqual(['2-b.mp4']);
+      expect(h.state.calls.find((c) => c[0] === 'bg-upsert')[1]).toMatchObject({ url: null, kind: null, storage_path: null });
+      expect(container.querySelector('.bg-media')).toBeNull();
+    });
   });
 });
 

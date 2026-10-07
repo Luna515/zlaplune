@@ -3,6 +3,8 @@ import { supabase } from './supabase';
 import PublicPage from './pages/PublicPage';
 import AdminPage from './pages/AdminPage';
 import CancelPage from './pages/CancelPage';
+import { BackgroundProvider } from './components/BackgroundContext';
+import SiteBackground from './components/SiteBackground';
 
 function useRoute() {
   const [hash, setHash] = useState(window.location.hash);
@@ -42,7 +44,9 @@ export default function App() {
   else page = <PublicPage />;
 
   return (
-    <div className="shell">
+    <BackgroundProvider>
+      <SiteBackground />
+      <div className="shell">
       <main>{page}</main>
       <footer className="foot">
         {isAdminRoute ? (
@@ -51,6 +55,7 @@ export default function App() {
           <a href="#/admin">Panel admina</a>
         )}
       </footer>
-    </div>
+      </div>
+    </BackgroundProvider>
   );
 }

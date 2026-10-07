@@ -1198,3 +1198,48 @@ body::before {
   background: rgba(143, 148, 156, 0.1);
   color: var(--text);
 }
+
+/* ---------- tło strony (obraz / GIF / wideo) ---------- */
+
+.bg-media {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.bg-media.is-ready {
+  opacity: var(--bg-opacity, 0.35);
+}
+
+.bgedit {
+  margin-top: 32px;
+}
+
+.bgedit summary {
+  cursor: pointer;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 26px;
+}
+
+.bgedit__body {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  max-width: 560px;
+}
+
+.bgedit input[type='range'] {
+  width: 100%;
+  accent-color: var(--text);
+}
+
+.bgedit input[type='file'] {
+  padding: 8px 0;
+}

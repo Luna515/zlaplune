@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import Board from '../components/Board';
+import BackgroundEditor from '../components/BackgroundEditor';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -107,6 +108,7 @@ export default function AdminPage() {
           </button>
         </div>
       </header>
+      <BackgroundEditor />
       <Board mode="admin" />
     </>
   );
